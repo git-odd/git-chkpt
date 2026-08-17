@@ -484,3 +484,17 @@ fn fossil_resolves_from_path_without_auto_download() {
     assert!(!cache_dir.exists() || fs::read_dir(&cache_dir).unwrap().next().is_none());
 }
 
+#[test]
+fn git_checkpoint_shim_binary_works() {
+    let bin = env!("CARGO_BIN_EXE_git-checkpoint");
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path();
+
+    init_repo(repo);
+    write(&repo.join("a.txt"), "A\n");
+
+    let save = run_ok(repo, bin, &["save", "via shim"]);
+    assert!(save.contains("Saved checkpoint"), "{save}");
+    let list = run_ok(repo, bin, &["list"]);
+    assert!(list.contains("via shim"), "{list}");
+}

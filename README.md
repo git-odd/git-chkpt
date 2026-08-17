@@ -1,62 +1,72 @@
 # git-chkpt
 
-本地 Git 工作区检查点工具。
+<div align="center">
 
-在还不打算提交（commit）、暂存（stash）或切换分支时，快速保存当前工作区的文件现场，并在需要时一键完整恢复。
+**English** | [简体中文](README_zh.md)
 
----
+</div>
 
-## 为什么需要
+Lightweight, local checkpoint tool for Git worktrees, powered by [Fossil](https://fossil-scm.org/).
 
-在使用 AI 辅助编程、进行大规模重构或排查复杂问题时，我们经常需要频繁试验：
-
-- **比 `git stash` 更自由**：不强制要求工作区干净，不与暂存区（index）冲突，支持直观的命名与多版本时间线。
-- **比临时 commit 更干净**：不产生无意义的 commit，不污染 Git 历史与 commit log。
-- **自带反悔机制**：每次 `restore` 前都会自动为当前现场生成检查点，随时可以撤销恢复。
+Quickly save snapshots of your working tree files when you are not ready to commit, stash, or switch branches—and restore them completely whenever needed. Supports both the primary command `git chkpt` and its full alias `git checkpoint`.
 
 ---
 
-## 快速上手
+## Why git-chkpt?
 
-在任意 Git 仓库的工作区中直接运行：
+When working with AI coding assistants, performing large refactorings, or debugging complex issues, you often need to experiment rapidly:
 
-### 1. 保存当前现场 (Save)
+- **Powered by Fossil**: Uses the rock-solid [Fossil SCM](https://fossil-scm.org/) engine under the hood for fast deduplication and local snapshots, completely isolated from your Git history.
+- **More flexible than `git stash`**: Does not require a clean working tree, never conflicts with the index/staging area, and supports clear naming with a full version timeline.
+- **Cleaner than temporary commits**: Leaves no messy "wip" commits in your Git history or commit log.
+- **Built-in regret safety net**: Every `restore` automatically saves the current workspace state as a `pre-restore` checkpoint, so you can easily undo any restore operation.
+
+---
+
+## Quick Start
+
+Run directly inside any non-bare Git repository (`git chkpt` and `git checkpoint` are identical):
+
+### 1. Save Workspace State (Save)
 
 ```bash
-# 快速存档（默认命令）
+# Quick save (default command)
 git chkpt
 
-# 附带备注信息
-git chkpt save "重构解析器前"
+# Save with a descriptive message
+git chkpt save "before parser refactor"
+
+# Using the full alias
+git checkpoint save "before parser refactor"
 ```
 
-### 2. 查看检查点列表 (List)
+### 2. List Checkpoints (List)
 
 ```bash
 git chkpt ls
-# 或: git chkpt list
+# or: git chkpt list
 ```
 
-输出示例：
+Example output:
 
 ```text
 ID          CREATED                 SOURCE    MESSAGE
-4f18ac932e  2026-08-16 10:21:13.052 manual    重构解析器前
+4f18ac932e  2026-08-16 10:21:13.052 manual    before parser refactor
 ```
 
-### 3. 查看改动差异 (Diff)
+### 3. View Workspace Diff (Diff)
 
-查看当前工作区与最新（或指定）检查点的文件变动摘要：
+Compare the current workspace against the latest (or specified) checkpoint:
 
 ```bash
-# 比较最新检查点与当前工作区
+# Compare latest checkpoint against current workspace
 git chkpt diff
 
-# 比较指定检查点与当前工作区
+# Compare specific checkpoint against current workspace
 git chkpt diff 4f18ac93
 ```
 
-输出示例：
+Example output:
 
 ```text
 M  src/parser.rs
@@ -64,104 +74,119 @@ A  tests/parser_cases.rs
 D  notes/old-plan.md
 ```
 
-### 4. 恢复现场 (Restore)
+### 4. Restore Workspace (Restore)
 
-恢复到最新或指定的检查点：
+Restore files to the latest or a specified checkpoint:
 
 ```bash
-# 恢复到最新检查点
+# Restore to the latest checkpoint
 git chkpt restore
 
-# 恢复到指定检查点
+# Restore to a specific checkpoint
 git chkpt restore 4f18ac93
 ```
 
-> **安全提示**：执行 `restore` 前，工具会自动将当前工作区保存为一个 `pre-restore` 检查点。如果不小心恢复错误，直接再次 `git chkpt restore` 即可回到恢复前的状态。
+> **Safety Note**: Before restoring, `git-chkpt` automatically saves your current workspace as a `pre-restore` checkpoint. If you accidentally restore or change your mind, simply run `git chkpt restore` again to return to where you were.
 
-### 5. 查看检查点详情 (Show)
+### 5. Inspect Checkpoint Details (Show)
 
 ```bash
-# 查看最新检查点详情
+# Show details of the latest checkpoint
 git chkpt show
 
-# 查看指定检查点详情
+# Show details of a specific checkpoint
 git chkpt show 4f18ac93
 ```
 
-### 6. 清理检查点 (Delete)
+### 6. Delete Checkpoint (Delete)
 
 ```bash
 git chkpt rm 4f18ac93
-# 或: git chkpt delete 4f18ac93
+# or: git chkpt delete 4f18ac93
 ```
 
 ---
 
-## 典型工作流
+## Typical Workflows
 
-### 场景 A：AI 辅助编程与重构试错
+### Scenario A: AI-Assisted Refactoring & Safe Experimentation
 
 ```bash
-# 1. 在 AI 大幅修改代码前快速存档
-git chkpt save "AI 重构前"
+# 1. Take a snapshot before letting AI refactor code
+git chkpt save "before AI refactor"
 
-# 2. 运行 AI 工具或编写实验性代码
-# ... 编写代码、运行测试 ...
+# 2. Run AI coding tools or write experimental changes
+# ... review code, run test suite ...
 
-# 3. 检查代码改动概况
+# 3. Check summary of changes
 git chkpt diff
 
-# 4. 如果实验不满意，一键撤销所有改动
+# 4. If unsatisfied, roll back in one step
 git chkpt restore
 ```
 
-### 场景 B：恢复后反悔
+### Scenario B: Undoing a Restore
 
 ```bash
-# 恢复了某个旧版本后，发现刚才未提交的修改依然需要
+# After restoring an older state, you realize you still need recent edits:
 git chkpt ls
-# 找到自动生成的 pre-restore 检查点并恢复
+# Find the automatic pre-restore checkpoint and restore it:
 git chkpt restore <pre-restore-id>
 ```
 
 ---
 
-## 工作边界与特性
+## Boundaries & Characteristics
 
-- **保存范围**：
-  - Git 已追踪的文件（tracked）。
-  - Git 未忽略的新增文件（untracked）。
-- **不受影响的内容**：
-  - `.git` 内部状态（HEAD、分支、commit 历史、暂存区 index 等保持原样）。
-  - `.gitignore` 忽略的文件与目录（如编译产物、本地缓存等不会被保存，也不会在恢复时被删除）。
-  - Submodule 及嵌套 Git 仓库的内部文件。
-- **独立隔离**：
-  - 每个 Git worktree（包括 `git worktree add` 创建的 linked worktree）拥有完全独立的检查点存储，互不干扰。
+- **Included in Checkpoints**:
+  - All Git tracked files.
+  - Non-ignored untracked files.
+- **Untouched & Preserved**:
+  - `.git` internal state (HEAD, branches, commit history, index / staging area remain intact).
+  - `.gitignore` ignored files and directories (build artifacts, caches, etc. are not saved and never removed on restore).
+  - Submodules and nested Git repositories.
+- **Worktree Isolation**:
+  - Each Git worktree (including linked worktrees created via `git worktree add`) has completely isolated checkpoint storage.
 
 ---
 
-## 安装
+## Installation
 
-### 前置要求
-- 系统已安装 Git
+### Prerequisites
+- Git installed on your system
 
-### 通过 Cargo 安装
+### Option 1: Pre-built Binaries from GitHub Releases (Recommended)
+Download the pre-compiled archive for your OS from the [Releases page](https://github.com/iroha3/git-chkpt/releases) and place the binaries in your system `PATH`. The archive includes the storage sidecar for zero-network, fully offline usage.
+
+### Option 2: Build & Install via Cargo
 ```bash
 cargo install --path .
-# 或发布后：cargo install git-chkpt
+# or once published: cargo install git-chkpt
 ```
 
-确保 Cargo 二进制目录在系统 `PATH` 中。安装后，Git 会自动将 `git chkpt` 识别为外部命令。
+Ensure `~/.cargo/bin` is in your system `PATH`. Cargo will automatically install both `git-chkpt` and `git-checkpoint`.
 
 ---
 
-## 进阶文档
+## Deep Dive & Documentation
 
-关于架构设计、内部存储原理及详细规格，请参阅 [`docs/`](docs/) 目录：
+For architecture design, storage mechanisms, and formal specifications, please refer to the [`docs/`](docs/) directory:
 
-- [技术设计与架构说明](docs/TECHNICAL_NOTES.md)
-- [当前实现规格 (Implementation Spec)](docs/IMPLEMENTATION_SPEC.md)
-- [产品目标草案 (Product Spec Draft)](docs/PRODUCT_SPEC_DRAFT.md)
-- [产品草案覆盖矩阵 (Product Spec Coverage)](docs/PRODUCT_SPEC_COVERAGE.md)
-- [项目当前状态 (Status)](docs/STATUS.md)
-- [命令命名评估 (Naming Evaluation)](docs/NAMING_EVALUATION.md)
+- [Technical Notes & Architecture](docs/TECHNICAL_NOTES.md)
+- [Current Implementation Specification](docs/IMPLEMENTATION_SPEC.md)
+- [Product Specification Draft](docs/PRODUCT_SPEC_DRAFT.md)
+- [Product Spec Coverage Matrix](docs/PRODUCT_SPEC_COVERAGE.md)
+- [Project Status](docs/STATUS.md)
+- [Naming Evaluation](docs/NAMING_EVALUATION.md)
+
+---
+
+## License
+
+This project is dual-licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+
+at your option.
+

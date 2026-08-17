@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Code Quality & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check Formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy (Default Features)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Clippy (No Default Features)
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Fossil (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fossil
+
+      - name: Install Fossil (macOS)
+        if: runner.os == 'macOS'
+        run: brew install fossil
+
+      - name: Install Fossil (Windows)
+        if: runner.os == 'Windows'
+        run: choco install fossil --no-progress
+
+      - name: Build All Binaries
+        run: cargo build --bins
+
+      - name: Run Tests (Default Features)
+        run: cargo test --all-targets
+
+      - name: Run Tests (No Default Features)
+        run: cargo test --no-default-features

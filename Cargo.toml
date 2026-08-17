@@ -2,6 +2,24 @@
 name = "git-chkpt"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Lightweight, local checkpoint tool for Git worktrees"
+repository = "https://github.com/iroha3/git-chkpt"
+readme = "README.md"
+keywords = ["git", "checkpoint", "backup", "vcs", "productivity"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+name = "git_chkpt"
+path = "src/lib.rs"
+
+[[bin]]
+name = "git-chkpt"
+path = "src/main.rs"
+
+[[bin]]
+name = "git-checkpoint"
+path = "src/bin/git_checkpoint.rs"
 
 [features]
 default = ["auto-fossil"]
