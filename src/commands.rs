@@ -717,7 +717,7 @@ fn format_time(time: DateTime<chrono::Utc>) -> String {
     local.format("%Y-%m-%d %H:%M:%S%.3f").to_string()
 }
 
-fn human_bytes(bytes: u64) -> String {
+pub(crate) fn human_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
     let mut value = bytes as f64;
     let mut unit = 0;

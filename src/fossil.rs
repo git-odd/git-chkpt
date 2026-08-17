@@ -12,7 +12,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
 #[cfg(feature = "auto-fossil")]
-use std::io::{self, Cursor, Read};
+use std::io::{self, Cursor, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 #[cfg(feature = "auto-fossil")]
@@ -453,6 +453,10 @@ fn auto_fossil() -> Result<Option<PathBuf>> {
 
     let archive_path = cache_dir.join(artifact.file_name);
     let url = format!("{FOSSIL_DOWNLOAD_BASE}/{}", artifact.file_name);
+    eprintln!(
+        "git-chkpt: preparing bundled Fossil {FOSSIL_VERSION} ({}) from the official download site; first run only, then cached",
+        artifact.target_label
+    );
     download_if_needed(&url, &archive_path, artifact.sha3_256)?;
     extract_fossil_binary(&archive_path, artifact.binary_name, &binary_path)?;
     Ok(Some(binary_path))
@@ -559,8 +563,11 @@ fn download_if_needed(url: &str, archive_path: &Path, expected_sha3: &str) -> Re
             }
         }
     }
-    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("unknown download error")))
-        .with_context(|| format!("download Fossil sidecar from {url}"))
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("unknown download error"))).with_context(|| {
+        format!(
+            "download Fossil sidecar from {url}; if this keeps failing, point GIT_CHKPT_FOSSIL at a locally installed fossil, or place a fossil binary next to the git-chkpt executable (see README)"
+        )
+    })
 }
 
 #[cfg(feature = "auto-fossil")]
@@ -569,10 +576,60 @@ fn download_once(url: &str, tmp_path: &Path) -> Result<()> {
         .timeout(Duration::from_secs(300))
         .call()
         .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+    let total = response
+        .header("Content-Length")
+        .and_then(|value| value.parse::<u64>().ok());
+    let name = url.rsplit('/').next().unwrap_or(url);
+    let interactive = std::io::stderr().is_terminal();
+    if !interactive {
+        eprintln!("git-chkpt: downloading {name}");
+    }
     let mut reader = response.into_reader();
     let mut tmp =
         fs::File::create(tmp_path).with_context(|| format!("create {}", tmp_path.display()))?;
-    io::copy(&mut reader, &mut tmp).with_context(|| format!("write {}", tmp_path.display()))?;
+    let mut buffer = [0_u8; 1024 * 64];
+    let mut downloaded = 0_u64;
+    loop {
+        let read = reader
+            .read(&mut buffer)
+            .with_context(|| format!("download interrupted: {url}"))?;
+        if read == 0 {
+            break;
+        }
+        tmp.write_all(&buffer[..read])
+            .with_context(|| format!("write {}", tmp_path.display()))?;
+        downloaded += read as u64;
+        if interactive {
+            let progress = match total {
+                Some(total) => format!(
+                    "git-chkpt: downloading {name}: {} / {} ({:.0}%)",
+                    crate::commands::human_bytes(downloaded),
+                    crate::commands::human_bytes(total),
+                    downloaded as f64 / total as f64 * 100.0
+                ),
+                None => format!(
+                    "git-chkpt: downloading {name}: {}",
+                    crate::commands::human_bytes(downloaded)
+                ),
+            };
+            eprint!("\r{progress}");
+            let _ = std::io::stderr().flush();
+        }
+    }
+    if interactive {
+        let summary = match total {
+            Some(total) => format!(
+                "\rgit-chkpt: downloaded {name} ({} / {})",
+                crate::commands::human_bytes(downloaded),
+                crate::commands::human_bytes(total)
+            ),
+            None => format!(
+                "\rgit-chkpt: downloaded {name} ({})",
+                crate::commands::human_bytes(downloaded)
+            ),
+        };
+        eprintln!("{summary}");
+    }
     Ok(())
 }
 

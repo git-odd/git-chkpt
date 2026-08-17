@@ -55,7 +55,7 @@ cargo install --path .
 
 1. `GIT_CHKPT_FOSSIL` 指定的程序路径。
 2. `git-chkpt` 二进制旁边的 sidecar：同目录、`bin/`、`sidecar/`、`sidecars/`。
-3. 默认启用的 `auto-fossil`：首次需要 Fossil 时按当前平台下载官方预编译包，校验 SHA3-256 后缓存到用户 cache 目录。
+3. 默认启用的 `auto-fossil`：首次需要 Fossil 时按当前平台下载官方预编译包（带进度提示），校验 SHA3-256 后缓存到用户 cache 目录。下载遵循标准代理环境变量（`HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY`）。
 
 可用 `--no-default-features` 关闭自动下载；此时必须提供 sidecar 或 `GIT_CHKPT_FOSSIL`。开发/测试可用 `GIT_CHKPT_FOSSIL_RUNTIME_CACHE` 指定自动下载缓存目录。
 
