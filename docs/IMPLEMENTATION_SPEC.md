@@ -12,11 +12,11 @@
 ```bash
 git chkpt
 git chkpt save [MESSAGE]
-git chkpt list
+git chkpt list    # alias: ls
 git chkpt show [CHECKPOINT]
 git chkpt diff [CHECKPOINT]
 git chkpt restore [CHECKPOINT]
-git chkpt delete <CHECKPOINT>...
+git chkpt delete <CHECKPOINT>...  # alias: rm
 ```
 
 实现二进制名为 `git-chkpt`，作为 Git external command 使用。
@@ -29,7 +29,8 @@ git chkpt delete <CHECKPOINT>...
 
 - 当前目录 MUST 位于非 bare Git worktree 中。
 - 系统 PATH 中 MUST 能执行 `git`。
-- 系统 PATH 中 MUST 能执行 `fossil`。
+- 默认构建 SHOULD 能在首次需要 Fossil 时自动下载、校验并缓存官方 Fossil 预编译包。
+- release / install tree MAY 提供随包发布的 Fossil sidecar binary，用于覆盖自动下载路径。
 - Fossil MUST 只作为本地存储后端使用。
 
 如果当前 repository 是 bare repository，命令 MUST 失败并返回 `bare-repository` 语义错误。
@@ -83,7 +84,21 @@ git-chkpt/
 
 ## 5. Fossil 使用
 
-实现使用 Fossil CLI。
+实现使用 Fossil CLI，但不要求用户自行安装系统级 `fossil`。
+
+默认查找顺序：
+
+1. `GIT_CHKPT_FOSSIL` 指定的程序路径。
+2. 当前 `git-chkpt` executable 所在目录下的 packaged sidecar：
+
+```text
+fossil[.exe]
+bin/fossil[.exe]
+sidecar/fossil[.exe]
+sidecars/fossil[.exe]
+```
+
+3. 默认 feature `auto-fossil` 启用时，按当前 target 下载并缓存官方 Fossil 预编译包。下载包必须使用固定文件名与 SHA3-256 校验值。
 
 初始化 MUST：
 
@@ -167,6 +182,7 @@ Pre-restore checkpoint 使用：
   "source": {
     "kind": "automatic",
     "operation": "pre-restore",
+    "triggering_command": "restore",
     "target_checkpoint": "..."
   }
 }
@@ -255,16 +271,16 @@ Save 失败后 MUST 尝试清理 staging。
 - 如果存在未完成 restore journal，则拒绝普通读取。
 - 只列当前 worktree Fossil repository 中未逻辑删除且校验通过的 checkpoint。
 - 按 manifest `created_at_utc` 倒序排列。
-- 展示本机时区时间，包含 UTC offset。
+- 展示本机时区时间，但不显示 UTC offset。
 - ID 展示为当前列表内唯一短前缀，最短 8 字符。
 
 输出列：
 
 ```text
-ID          CREATED                         SOURCE        MESSAGE
+ID          CREATED                 SOURCE              MESSAGE
 ```
 
-`SOURCE` 对 manual save 显示 `manual`，对 pre-restore 显示 `pre-restore`。
+`SOURCE` 对 manual save 显示 `manual`，对由 restore 触发的 pre-restore 显示 `pre-restore:restore`。
 
 ## 11. Show 行为
 
@@ -337,7 +353,7 @@ Restore 会为文件/目录类型变化移除空目录或替换普通文件。
 
 ## 15. Delete 行为
 
-`delete <CHECKPOINT>...`：
+`delete <CHECKPOINT>...` / `rm <CHECKPOINT>...`：
 
 - 必须至少提供一个 ID。
 - 获取当前 worktree 独占 lock。
@@ -345,14 +361,14 @@ Restore 会为文件/目录类型变化移除空目录或替换普通文件。
 - 如果任何 ID 不存在或不唯一，MUST 不执行部分删除。
 - 删除是逻辑删除：把完整 checkpoint ID 写入 `deleted.json`。
 - `deleted.json` 使用同目录临时文件原子写入。
-- delete 后，公开命令 `list/show/diff/restore/delete` 不再能通过该 ID 正常访问该 checkpoint。
+- delete 后，公开命令 `list`/`ls`/`show`/`diff`/`restore`/`delete`/`rm` 不再能通过该 ID 正常访问该 checkpoint。
 - Fossil check-in 仍可能物理存在；不保证回收磁盘空间。
 
 ## 16. Locking
 
-`save`、`restore`、`delete` 使用独占文件锁。
+`save`、`restore`、`delete`/`rm` 使用独占文件锁。
 
-`list`、`show`、`diff` 使用 shared 文件锁。
+`list`/`ls`、`show`、`diff` 使用 shared 文件锁。
 
 Lock 文件保存元信息：
 

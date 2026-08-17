@@ -11,11 +11,11 @@
 ```bash
 git chkpt
 git chkpt save [MESSAGE]
-git chkpt list
+git chkpt list    # alias: ls
 git chkpt show [CHECKPOINT]
 git chkpt diff [CHECKPOINT]
 git chkpt restore [CHECKPOINT]
-git chkpt delete <CHECKPOINT>...
+git chkpt delete <CHECKPOINT>...  # alias: rm
 ```
 
 默认 `git chkpt` 等价于 `git chkpt save`。
@@ -38,11 +38,26 @@ restore 前会自动保存当前现场为一个 pre-restore checkpoint，所以�
 
 ## 安装
 
-需要先安装：
+需要：
 
 - Git
-- Fossil SCM
-- Rust / Cargo
+- 网络访问 Fossil 官方下载站（仅首次自动准备 Fossil 时需要）
+- Rust / Cargo（仅从源码构建或 `cargo install` 时需要）
+
+`cargo install` 后可直接运行：
+
+```bash
+cargo install --path .
+# 或发布后：cargo install git-chkpt
+```
+
+用户不需要单独安装 Fossil 到系统 `PATH`。运行时查找顺序：
+
+1. `GIT_CHKPT_FOSSIL` 指定的程序路径。
+2. `git-chkpt` 二进制旁边的 sidecar：同目录、`bin/`、`sidecar/`、`sidecars/`。
+3. 默认启用的 `auto-fossil`：首次需要 Fossil 时按当前平台下载官方预编译包，校验 SHA3-256 后缓存到用户 cache 目录。
+
+可用 `--no-default-features` 关闭自动下载；此时必须提供 sidecar 或 `GIT_CHKPT_FOSSIL`。开发/测试可用 `GIT_CHKPT_FOSSIL_RUNTIME_CACHE` 指定自动下载缓存目录。
 
 构建：
 
@@ -98,14 +113,16 @@ Message: before risky edit
 列出 checkpoint：
 
 ```bash
-git chkpt list
+git chkpt ls
 ```
+
+`git chkpt list` 也可用。
 
 输出类似：
 
 ```text
-ID          CREATED                         SOURCE        MESSAGE
-4f18ac932e  2026-08-16 10:21:13.052 +08:00 manual        before risky edit
+ID          CREATED                 SOURCE              MESSAGE
+4f18ac932e  2026-08-16 10:21:13.052 manual              before risky edit
 ```
 
 查看最新 checkpoint：
@@ -162,8 +179,10 @@ Restored checkpoint 4f18ac932e7d
 删除 checkpoint 的公开可见性：
 
 ```bash
-git chkpt delete 4f18ac93
+git chkpt rm 4f18ac93
 ```
+
+`git chkpt delete` 也可用。
 
 ## 它会保存什么
 
@@ -192,7 +211,7 @@ git chkpt delete 4f18ac93
 - submodule / nested Git repository 内部不会被父项目 restore 修改。
 - Git index / HEAD / refs 不会被主动修改。
 
-restore 前会自动执行一次内部 save，创建 pre-restore checkpoint。
+restore 前会自动执行一次内部 save，创建 pre-restore checkpoint；这个自动 checkpoint 的 `SOURCE` 会显示为 `pre-restore:restore`，表示由 `restore` 命令触发。
 
 ## 常用工作流
 
@@ -214,8 +233,8 @@ git commit -m "rewrite parser"
 checkpoint 不进入 Git 历史。你可以之后删除它：
 
 ```bash
-git chkpt list
-git chkpt delete <id>
+git chkpt ls
+git chkpt rm <id>
 ```
 
 ### 恢复后反悔
@@ -227,7 +246,7 @@ git chkpt restore <old-id>
 如果发现还是恢复前的状态好，直接恢复最新的 pre-restore checkpoint：
 
 ```bash
-git chkpt list
+git chkpt ls
 git chkpt restore <pre-restore-id>
 ```
 
@@ -242,7 +261,7 @@ git worktree add ../feature feature
 主 worktree 和 linked worktree 的 checkpoint 是隔离的：
 
 - 在哪个 worktree 执行 `git chkpt save`，checkpoint 就属于哪个 worktree。
-- `git chkpt list` 只列当前 worktree 的 checkpoint。
+- `git chkpt ls` / `git chkpt list` 只列当前 worktree 的 checkpoint。
 - 不能跨 worktree 查看或恢复。
 
 ## 错误和安全性

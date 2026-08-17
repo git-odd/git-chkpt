@@ -12,19 +12,20 @@
 
 - `git chkpt` 等价于 `git chkpt save`。
 - `git chkpt save [MESSAGE]` 保存当前 managed universe 的完整文件快照。
-- `git chkpt list` 列出当前 worktree 的有效 checkpoint。
+- `git chkpt list` / `git chkpt ls` 列出当前 worktree 的有效 checkpoint。
 - `git chkpt show [CHECKPOINT]` 显示 checkpoint 元数据和摘要。
 - `git chkpt diff [CHECKPOINT]` 显示 checkpoint 到当前工作区的 A/M/D 摘要。
 - `git chkpt restore [CHECKPOINT]` 恢复到目标 checkpoint；省略 ID 时恢复最新 checkpoint。
-- `git chkpt delete <CHECKPOINT>...` 从公开命令中隐藏 checkpoint。
+- `git chkpt delete <CHECKPOINT>...` / `git chkpt rm <CHECKPOINT>...` 从公开命令中隐藏 checkpoint。
 - 每个 Git worktree 使用独立 checkpoint 存储。
 - linked worktree 与主 worktree 的 checkpoint 物理隔离。
-- restore 前自动创建 pre-restore checkpoint。
+- restore 前自动创建 pre-restore checkpoint，并在 `SOURCE` 中标出触发命令（例如 `pre-restore:restore`）。
 - restore 失败后会尝试自动 rollback 到 pre-restore checkpoint。
 - save 不修改用户文件、Git index、HEAD、refs。
 - restore 不主动修改 Git index、HEAD、refs。
 - ignored 文件不被保存，也不被 restore 删除。
 - submodule / nested Git repository 内部内容不被父项目 checkpoint 递归管理。
+- 自动获取或使用随包发布的 Fossil CLI；用户不需要单独安装系统级 `fossil`。
 - Fossil autosync 显式关闭；不配置 remote；不执行网络同步。
 
 ## 存储位置
@@ -60,8 +61,8 @@ linked worktree 通常是：
 
 - 保存 / diff / 恢复基本流程。
 - ignored 文件保留。
-- pre-restore 可逆恢复。
-- delete 后公开命令不可见。
+- pre-restore 可逆恢复与 `SOURCE` 触发命令展示。
+- list/delete 别名 `ls` / `rm`。
 - save 不改变 Git status / index。
 - restore 不改变 Git index 字节。
 - linked worktree checkpoint 隔离。
@@ -70,6 +71,7 @@ linked worktree 通常是：
 - nested Git repository 不递归进入。
 - 只读命令在未初始化时不创建 checkpoint 存储。
 - `.git` 删除并重新 `git init` 后不继承旧 checkpoint。
+- list 时间展示不带 UTC offset。
 - 无子命令默认保存。
 
 最近验证命令：

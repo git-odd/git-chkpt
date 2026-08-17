@@ -188,6 +188,7 @@ pub fn verify_worktree(ctx: &GitContext, expected: &Manifest) -> Result<()> {
         Source {
             kind: "internal".to_owned(),
             operation: "verify".to_owned(),
+            triggering_command: None,
             target_checkpoint: None,
         },
         None,

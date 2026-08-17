@@ -17,10 +17,12 @@ pub struct Manifest {
     pub files: Vec<Entry>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Source {
     pub kind: String,
     pub operation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub triggering_command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_checkpoint: Option<String>,
 }
@@ -30,6 +32,7 @@ impl Source {
         Self {
             kind: "manual".to_owned(),
             operation: "save".to_owned(),
+            triggering_command: None,
             target_checkpoint: None,
         }
     }
@@ -38,6 +41,7 @@ impl Source {
         Self {
             kind: "automatic".to_owned(),
             operation: "pre-restore".to_owned(),
+            triggering_command: Some("restore".to_owned()),
             target_checkpoint: Some(target_checkpoint),
         }
     }

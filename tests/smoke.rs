@@ -6,6 +6,7 @@ fn run(cwd: &Path, program: &str, args: &[&str]) -> Output {
     Command::new(program)
         .current_dir(cwd)
         .args(args)
+        .env("GIT_CHKPT_FOSSIL", "fossil")
         .output()
         .unwrap_or_else(|err| panic!("failed to run {program}: {err}"))
 }
@@ -54,6 +55,20 @@ fn save_id(output: &str) -> String {
         .unwrap_or_else(|| panic!("save output did not contain checkpoint id: {output}"))
         .trim()
         .to_owned()
+}
+
+fn assert_no_created_timezone(list: &str) {
+    for line in list.lines().skip(1).filter(|line| !line.trim().is_empty()) {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        assert!(
+            fields.len() >= 4,
+            "list row should have at least 4 fields: {line}"
+        );
+        assert!(
+            matches!(fields[3], "manual" | "pre-restore:restore"),
+            "CREATED should not include a timezone token: {line}"
+        );
+    }
 }
 
 fn init_repo(repo: &Path) {
@@ -121,9 +136,10 @@ fn save_diff_restore_preserves_ignored_files() {
         "CACHE-2\n"
     );
 
-    let list = run_ok(repo, bin, &["list"]);
+    let list = run_ok(repo, bin, &["ls"]);
     assert!(list.contains("manual"), "{list}");
-    assert!(list.contains("pre-restore"), "{list}");
+    assert!(list.contains("pre-restore:restore"), "{list}");
+    assert_no_created_timezone(&list);
 }
 
 #[test]
@@ -143,8 +159,8 @@ fn restore_is_reversible_with_pre_restore_checkpoint() {
     assert_eq!(fs::read_to_string(repo.join("a.txt")).unwrap(), "A\n");
     assert!(!repo.join("b.txt").exists());
 
-    let list = run_ok(repo, bin, &["list"]);
-    assert!(list.contains("pre-restore"), "{list}");
+    let list = run_ok(repo, bin, &["ls"]);
+    assert!(list.contains("pre-restore:restore"), "{list}");
 
     run_ok(repo, bin, &["restore"]);
     assert_eq!(fs::read_to_string(repo.join("a.txt")).unwrap(), "B\n");
@@ -161,13 +177,13 @@ fn delete_hides_checkpoint_from_public_commands() {
     write(&repo.join("a.txt"), "A\n");
     let id = save_id(&run_ok(repo, bin, &["save", "temporary checkpoint"]));
 
-    let list = run_ok(repo, bin, &["list"]);
+    let list = run_ok(repo, bin, &["ls"]);
     assert!(list.contains("temporary checkpoint"), "{list}");
 
-    let delete = run_ok(repo, bin, &["delete", &id]);
+    let delete = run_ok(repo, bin, &["rm", &id]);
     assert!(delete.contains("Deleted checkpoint"), "{delete}");
 
-    let list_after = run_ok(repo, bin, &["list"]);
+    let list_after = run_ok(repo, bin, &["ls"]);
     assert!(!list_after.contains("temporary checkpoint"), "{list_after}");
 
     let show = run_fail(repo, bin, &["show", &id]);

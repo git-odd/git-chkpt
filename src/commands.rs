@@ -105,7 +105,7 @@ fn list() -> Result<()> {
     if checkpoints.is_empty() {
         return Ok(());
     }
-    println!("ID          CREATED                         SOURCE        MESSAGE");
+    println!("ID          CREATED                 SOURCE              MESSAGE");
     let ids: Vec<String> = checkpoints
         .iter()
         .map(|checkpoint| checkpoint.id.clone())
@@ -115,7 +115,7 @@ fn list() -> Result<()> {
         let source = display_source(&checkpoint.manifest.source);
         let message = checkpoint.manifest.message.as_deref().unwrap_or("");
         println!(
-            "{:<11} {:<31} {:<13} {}",
+            "{:<11} {:<23} {:<19} {}",
             prefix,
             format_time(checkpoint.manifest.created_at_utc),
             source,
@@ -172,6 +172,7 @@ fn diff(checkpoint: Option<String>) -> Result<()> {
         Source {
             kind: "internal".to_owned(),
             operation: "diff".to_owned(),
+            triggering_command: None,
             target_checkpoint: Some(checkpoint.id.clone()),
         },
         None,
@@ -342,7 +343,7 @@ fn save_locked(
         let id = store.commit_staging(&comment)?;
         let persisted = store.validate_checkpoint(&id)?;
         if persisted.files != manifest.files
-            || persisted.source.operation != manifest.source.operation
+            || persisted.source != manifest.source
             || persisted.message != manifest.message
         {
             bail!("snapshot-failed: persisted checkpoint did not round-trip manifest metadata");
@@ -372,6 +373,7 @@ fn apply_manifest(
         Source {
             kind: "internal".to_owned(),
             operation: "restore-scan".to_owned(),
+            triggering_command: None,
             target_checkpoint: None,
         },
         None,
@@ -684,11 +686,15 @@ fn entry_map(manifest: &Manifest) -> BTreeMap<String, Entry> {
         .collect()
 }
 
-fn display_source(source: &Source) -> &str {
-    if source.operation == "pre-restore" {
+fn display_source(source: &Source) -> String {
+    let base = if source.operation == "pre-restore" {
         "pre-restore"
     } else {
         source.kind.as_str()
+    };
+    match source.triggering_command.as_deref() {
+        Some(command) => format!("{base}:{command}"),
+        None => base.to_owned(),
     }
 }
 
@@ -708,7 +714,7 @@ fn short_id(id: &str) -> String {
 
 fn format_time(time: DateTime<chrono::Utc>) -> String {
     let local: DateTime<Local> = DateTime::from(time);
-    local.format("%Y-%m-%d %H:%M:%S%.3f %:z").to_string()
+    local.format("%Y-%m-%d %H:%M:%S%.3f").to_string()
 }
 
 fn human_bytes(bytes: u64) -> String {

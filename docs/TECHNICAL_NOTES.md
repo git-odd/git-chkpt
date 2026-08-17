@@ -20,7 +20,7 @@ git ls-files -o --exclude-standard -z
 - submodule gitlink 能通过 mode `160000` 识别。
 - 不需要自己实现 `.gitignore` parser。
 
-Fossil 则被用作本地内容数据库：
+Fossil 则被用作本地内容数据库。默认构建会在首次需要 Fossil 时自动下载、校验并缓存官方预编译包；发行包仍可以把 sidecar binary 放在 `git-chkpt` 旁边来覆盖自动下载路径。
 
 - 每个 checkpoint 是一个 Fossil check-in。
 - Fossil check-in hash 是 checkpoint 内部完整 ID。
@@ -83,7 +83,7 @@ Manifest 记录：
 
 - format version
 - UTC 创建时间
-- source
+- source（automatic checkpoint 会额外记录触发它的命令，例如 `pre-restore:restore`）
 - message
 - path 列表
 - 文件类型
@@ -141,7 +141,7 @@ Saved current workspace as checkpoint e205be92773a
 Restored checkpoint 4f18ac932e7d
 ```
 
-如果用户想反悔，可以从 `list` 里找到 pre-restore checkpoint，再 restore 它。
+如果用户想反悔，可以从 `list` / `ls` 里找到 pre-restore checkpoint，再 restore 它。
 
 ## 6. Restore Journal 的作用
 
@@ -227,7 +227,7 @@ delete 后，该 checkpoint 不再能通过 git-chkpt 公开命令访问。
 deleted.json
 ```
 
-`list/show/diff/restore/delete` 只处理未逻辑删除的 checkpoint。
+`list`/`ls`、`show`、`diff`、`restore`、`delete`/`rm` 只处理未逻辑删除的 checkpoint。
 
 这避免了重写 Fossil repository 或破坏剩余历史。
 

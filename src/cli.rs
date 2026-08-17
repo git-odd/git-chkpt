@@ -17,6 +17,7 @@ pub enum Command {
         message: Vec<String>,
     },
     /// List checkpoints for the current worktree.
+    #[command(alias = "ls")]
     List,
     /// Show checkpoint metadata and summary. Defaults to the latest checkpoint.
     Show {
@@ -34,6 +35,7 @@ pub enum Command {
         checkpoint: Option<String>,
     },
     /// Logically delete checkpoints from public git-chkpt commands.
+    #[command(alias = "rm")]
     Delete {
         /// Full checkpoint IDs or unique prefixes.
         checkpoints: Vec<String>,

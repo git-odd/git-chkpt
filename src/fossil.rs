@@ -2,13 +2,40 @@ use crate::manifest::{FILES_DIR, MANIFEST_FILE, Manifest};
 use crate::pathutil::{join_under, normalize_git_path};
 use crate::snapshot::verify_materialized;
 use anyhow::{Context, Result, bail};
+#[cfg(feature = "auto-fossil")]
+use flate2::read::GzDecoder;
+#[cfg(feature = "auto-fossil")]
+use sha3::{Digest, Sha3_256};
 use std::collections::BTreeSet;
+use std::env;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
+#[cfg(feature = "auto-fossil")]
+use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(feature = "auto-fossil")]
+use std::time::Duration;
+#[cfg(feature = "auto-fossil")]
+use tar::Archive;
 use tempfile::NamedTempFile;
+#[cfg(feature = "auto-fossil")]
+use zip::ZipArchive;
+
+#[cfg(feature = "auto-fossil")]
+const FOSSIL_VERSION: &str = "2.28";
+#[cfg(feature = "auto-fossil")]
+const FOSSIL_DOWNLOAD_BASE: &str = "https://fossil-scm.org/home/uv";
+
+#[cfg(feature = "auto-fossil")]
+#[derive(Debug, Clone, Copy)]
+struct FossilArtifact {
+    file_name: &'static str,
+    sha3_256: &'static str,
+    binary_name: &'static str,
+    target_label: &'static str,
+}
 
 #[derive(Debug, Clone)]
 pub struct Store {
@@ -350,18 +377,310 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 fn fossil<const N: usize>(cwd: Option<&Path>, args: [&OsStr; N]) -> Result<Vec<u8>> {
-    let mut command = Command::new("fossil");
+    let fossil = fossil_program()?;
+    let mut command = Command::new(&fossil);
     command.args(args);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
-    let output = command.output().context("failed to execute fossil")?;
+    let output = command
+        .output()
+        .with_context(|| format!("failed to execute Fossil sidecar {}", fossil.display()))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
         bail!("fossil-failed: {stderr}{stdout}");
     }
     Ok(output.stdout)
+}
+
+fn fossil_program() -> Result<PathBuf> {
+    if let Some(value) = env::var_os("GIT_CHKPT_FOSSIL")
+        && !value.is_empty()
+    {
+        return Ok(PathBuf::from(value));
+    }
+
+    if let Some(sidecar) = packaged_fossil_sidecar()? {
+        return Ok(sidecar);
+    }
+
+    #[cfg(feature = "auto-fossil")]
+    if let Some(auto) = auto_fossil()? {
+        return Ok(auto);
+    }
+
+    let current_exe = env::current_exe().context("locate current git-chkpt executable")?;
+    let exe_dir = current_exe
+        .parent()
+        .context("current git-chkpt executable has no parent directory")?;
+    let expected = fossil_sidecar_candidates(exe_dir)
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    bail!(
+        "fossil-unavailable: packaged Fossil sidecar not found and automatic Fossil provisioning is unavailable for this target; expected one of: {expected}, or set GIT_CHKPT_FOSSIL"
+    )
+}
+
+fn packaged_fossil_sidecar() -> Result<Option<PathBuf>> {
+    let current_exe = env::current_exe().context("locate current git-chkpt executable")?;
+    let exe_dir = current_exe
+        .parent()
+        .context("current git-chkpt executable has no parent directory")?;
+    for candidate in fossil_sidecar_candidates(exe_dir) {
+        if candidate.is_file() {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
+}
+
+#[cfg(feature = "auto-fossil")]
+fn auto_fossil() -> Result<Option<PathBuf>> {
+    let Some(artifact) = fossil_artifact_for_target() else {
+        return Ok(None);
+    };
+    let cache_dir = auto_fossil_cache_dir()
+        .join(FOSSIL_VERSION)
+        .join(artifact.target_label);
+    fs::create_dir_all(&cache_dir).with_context(|| format!("create {}", cache_dir.display()))?;
+    let binary_path = cache_dir.join(fossil_binary_name());
+    if binary_path.is_file() {
+        return Ok(Some(binary_path));
+    }
+
+    let archive_path = cache_dir.join(artifact.file_name);
+    let url = format!("{FOSSIL_DOWNLOAD_BASE}/{}", artifact.file_name);
+    download_if_needed(&url, &archive_path, artifact.sha3_256)?;
+    extract_fossil_binary(&archive_path, artifact.binary_name, &binary_path)?;
+    Ok(Some(binary_path))
+}
+
+#[cfg(feature = "auto-fossil")]
+fn fossil_artifact_for_target() -> Option<FossilArtifact> {
+    if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        Some(FossilArtifact {
+            file_name: "fossil-linux-x64-2.28.tar.gz",
+            sha3_256: "cbd89e653e1b797802f2ee5bb55d6ad4959291ec6d6eb192c79ff62d9a224c33",
+            binary_name: "fossil",
+            target_label: "linux-x64",
+        })
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        Some(FossilArtifact {
+            file_name: "fossil-mac-arm-2.28.tar.gz",
+            sha3_256: "7b93271bc54345bbe26a3406a731f6e8448cab933d70435186dbbf3e17cfd522",
+            binary_name: "fossil",
+            target_label: "mac-arm",
+        })
+    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        Some(FossilArtifact {
+            file_name: "fossil-mac-x64-2.28.tar.gz",
+            sha3_256: "6451b46d57e1390e18b3f2a967adb5a7daad9216b7126768fbd3682a726b9c57",
+            binary_name: "fossil",
+            target_label: "mac-x64",
+        })
+    } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+        Some(FossilArtifact {
+            file_name: "fossil-w64-2.28.zip",
+            sha3_256: "1052b02b0594358d701170f8e2db7f948513cc44f44118a91369ab3f93641482",
+            binary_name: "fossil.exe",
+            target_label: "windows-x64",
+        })
+    } else if cfg!(all(target_os = "windows", target_arch = "x86")) {
+        Some(FossilArtifact {
+            file_name: "fossil-w32-2.28.zip",
+            sha3_256: "ace95312ff939b52208b7e6ce4864bf0c4f008a971117798c8153e19e1fd0251",
+            binary_name: "fossil.exe",
+            target_label: "windows-x86",
+        })
+    } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
+        Some(FossilArtifact {
+            file_name: "fossil-win-arm-2.28.zip",
+            sha3_256: "8901958fc561bea738565efbfb51928740a094c659bca875b35d5d2ca25d4ed8",
+            binary_name: "fossil.exe",
+            target_label: "windows-arm64",
+        })
+    } else {
+        None
+    }
+}
+
+#[cfg(feature = "auto-fossil")]
+fn auto_fossil_cache_dir() -> PathBuf {
+    if let Some(path) = env::var_os("GIT_CHKPT_FOSSIL_RUNTIME_CACHE") {
+        return PathBuf::from(path);
+    }
+    if let Some(path) = env::var_os("XDG_CACHE_HOME") {
+        return PathBuf::from(path).join("git-chkpt").join("fossil");
+    }
+    if cfg!(windows)
+        && let Some(path) = env::var_os("LOCALAPPDATA")
+    {
+        return PathBuf::from(path).join("git-chkpt").join("fossil");
+    }
+    if let Some(path) = env::var_os("HOME") {
+        return PathBuf::from(path)
+            .join(".cache")
+            .join("git-chkpt")
+            .join("fossil");
+    }
+    env::temp_dir().join("git-chkpt").join("fossil")
+}
+
+#[cfg(feature = "auto-fossil")]
+fn download_if_needed(url: &str, archive_path: &Path, expected_sha3: &str) -> Result<()> {
+    if archive_path.is_file() {
+        verify_sha3(archive_path, expected_sha3).with_context(|| {
+            format!(
+                "cached Fossil archive failed verification: {}",
+                archive_path.display()
+            )
+        })?;
+        return Ok(());
+    }
+
+    let tmp_path = archive_path.with_extension(format!("tmp-{}", std::process::id()));
+    let mut last_err = None;
+    for _attempt in 1..=3 {
+        match download_once(url, &tmp_path) {
+            Ok(()) => {
+                verify_sha3(&tmp_path, expected_sha3).with_context(|| {
+                    format!("downloaded Fossil archive failed verification: {url}")
+                })?;
+                fs::rename(&tmp_path, archive_path)
+                    .with_context(|| format!("persist {}", archive_path.display()))?;
+                return Ok(());
+            }
+            Err(err) => {
+                let _ = fs::remove_file(&tmp_path);
+                last_err = Some(err);
+            }
+        }
+    }
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("unknown download error")))
+        .with_context(|| format!("download Fossil sidecar from {url}"))
+}
+
+#[cfg(feature = "auto-fossil")]
+fn download_once(url: &str, tmp_path: &Path) -> Result<()> {
+    let response = ureq::get(url)
+        .timeout(Duration::from_secs(300))
+        .call()
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+    let mut reader = response.into_reader();
+    let mut tmp =
+        fs::File::create(tmp_path).with_context(|| format!("create {}", tmp_path.display()))?;
+    io::copy(&mut reader, &mut tmp).with_context(|| format!("write {}", tmp_path.display()))?;
+    Ok(())
+}
+
+#[cfg(feature = "auto-fossil")]
+fn verify_sha3(path: &Path, expected_sha3: &str) -> Result<()> {
+    let mut file = fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let mut hasher = Sha3_256::new();
+    let mut buffer = [0_u8; 1024 * 64];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .with_context(|| format!("read {}", path.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let actual = hex::encode(hasher.finalize());
+    if actual != expected_sha3 {
+        bail!("expected SHA3-256 {expected_sha3}, got {actual}");
+    }
+    Ok(())
+}
+
+#[cfg(feature = "auto-fossil")]
+fn extract_fossil_binary(archive_path: &Path, binary_name: &str, dest: &Path) -> Result<()> {
+    if archive_path.extension().and_then(|value| value.to_str()) == Some("zip") {
+        extract_from_zip(archive_path, binary_name, dest)?;
+    } else {
+        extract_from_tar_gz(archive_path, binary_name, dest)?;
+    }
+    set_executable(dest)
+}
+
+#[cfg(feature = "auto-fossil")]
+fn extract_from_zip(archive_path: &Path, binary_name: &str, dest: &Path) -> Result<()> {
+    let file =
+        fs::File::open(archive_path).with_context(|| format!("open {}", archive_path.display()))?;
+    let mut archive = ZipArchive::new(file).context("read Fossil zip archive")?;
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index).context("read Fossil zip entry")?;
+        if entry.is_dir() || !entry.name().replace('\\', "/").ends_with(binary_name) {
+            continue;
+        }
+        let mut out =
+            fs::File::create(dest).with_context(|| format!("create {}", dest.display()))?;
+        io::copy(&mut entry, &mut out).context("extract Fossil binary from zip")?;
+        return Ok(());
+    }
+    bail!("Fossil zip archive did not contain {binary_name}")
+}
+
+#[cfg(feature = "auto-fossil")]
+fn extract_from_tar_gz(archive_path: &Path, binary_name: &str, dest: &Path) -> Result<()> {
+    let bytes =
+        fs::read(archive_path).with_context(|| format!("read {}", archive_path.display()))?;
+    let decoder = GzDecoder::new(Cursor::new(bytes));
+    let mut archive = Archive::new(decoder);
+    for entry in archive.entries().context("read Fossil tar.gz entries")? {
+        let mut entry = entry.context("read Fossil tar.gz entry")?;
+        if !entry.header().entry_type().is_file() {
+            continue;
+        }
+        let path = entry.path().context("read Fossil tar.gz entry path")?;
+        if path.file_name().and_then(|value| value.to_str()) != Some(binary_name) {
+            continue;
+        }
+        let mut out =
+            fs::File::create(dest).with_context(|| format!("create {}", dest.display()))?;
+        io::copy(&mut entry, &mut out).context("extract Fossil binary from tar.gz")?;
+        return Ok(());
+    }
+    bail!("Fossil tar.gz archive did not contain {binary_name}")
+}
+
+#[cfg(all(feature = "auto-fossil", unix))]
+fn set_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = fs::metadata(path)
+        .with_context(|| format!("stat {}", path.display()))?
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).with_context(|| format!("chmod {}", path.display()))
+}
+
+#[cfg(all(feature = "auto-fossil", not(unix)))]
+fn set_executable(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
+fn fossil_sidecar_candidates(exe_dir: &Path) -> Vec<PathBuf> {
+    let name = fossil_binary_name();
+    [
+        exe_dir.join(name),
+        exe_dir.join("bin").join(name),
+        exe_dir.join("sidecar").join(name),
+        exe_dir.join("sidecars").join(name),
+    ]
+    .into_iter()
+    .collect()
+}
+
+fn fossil_binary_name() -> &'static str {
+    if cfg!(windows) {
+        "fossil.exe"
+    } else {
+        "fossil"
+    }
 }
 
 fn copy_dir_contents(src: &Path, dst: &Path) -> Result<()> {

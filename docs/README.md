@@ -26,6 +26,10 @@
   - 技术设计说明。
   - 解释 Git / Fossil / manifest / restore journal 等关键设计选择。
 
+- `NAMING_EVALUATION.md`
+  - `git chkpt` vs `git checkpoint` 命名评估。
+  - 给出当前推荐命名策略和未来兼容 alias 方案。
+
 - `../README.md`
   - 用户使用说明。
   - 面向安装、命令、常见工作流和限制。

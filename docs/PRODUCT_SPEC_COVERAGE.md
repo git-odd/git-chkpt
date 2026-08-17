@@ -17,9 +17,9 @@
 
 | 模块 | 当前状态 | 说明 |
 |---|---:|---|
-| 公共命令面 | 完整实现 | `save/list/show/diff/restore/delete` 与默认 `git chkpt` 均可用。 |
+| 公共命令面 | 完整实现 | `save/list(ls)/show/diff/restore/delete(rm)` 与默认 `git chkpt` 均可用。 |
 | 每 worktree 独立存储 | 完整实现 | 使用当前 worktree 专属 Git admin dir，linked worktree 有测试覆盖。 |
-| Fossil 本地后端 | 完整实现 | 使用 Fossil repository + 私有 checkout，关闭 autosync。 |
+| Fossil 本地后端 | 完整实现 | 自动下载/校验官方 Fossil 预编译包，仍支持 Fossil repository + 私有 checkout，关闭 autosync。 |
 | Save 基础契约 | 基本实现 | 无工作区副作用、manifest、hash、staging、round-trip 校验已实现。 |
 | Restore 基础契约 | 基本实现 | pre-restore、完整文件恢复、ignored 保留、rollback 已实现。 |
 | Delete 契约 | 基本实现 | 当前实现为逻辑删除，不做物理删除。符合草案初步产品语义。 |
@@ -38,11 +38,11 @@
 
 ```bash
 git chkpt save [MESSAGE]
-git chkpt list
+git chkpt list    # alias: ls
 git chkpt show [CHECKPOINT]
 git chkpt diff [CHECKPOINT]
 git chkpt restore [CHECKPOINT]
-git chkpt delete <CHECKPOINT>...
+git chkpt delete <CHECKPOINT>...  # alias: rm
 git chkpt
 ```
 
@@ -54,7 +54,7 @@ git chkpt
 - `save` 支持可选 message。
 - `show/diff/restore` 省略 ID 时默认使用最新有效 checkpoint。
 - `show/diff/restore/delete` 支持完整 hash 或唯一前缀。
-- `delete` 支持一次删除多个 checkpoint。
+- `delete` / `rm` 支持一次删除多个 checkpoint。
 
 测试覆盖：
 
@@ -114,6 +114,7 @@ git chkpt
 
 实现情况：
 
+- 默认 `auto-fossil` feature 会按平台下载并缓存官方 Fossil 预编译包；开发/测试可用 `GIT_CHKPT_FOSSIL` 覆盖。
 - `repository.fossil` 是唯一内容数据库。
 - `checkout/` 是私有 Fossil checkout。
 - 初始化执行 `fossil settings autosync off`。
@@ -232,7 +233,7 @@ Git tracked paths + Git 未忽略的 untracked paths
 
 - `format_version = 1`。
 - UTC 创建时间。
-- source / message / files。
+- source / message / files；automatic source 会记录触发命令。
 - 普通文件记录 mode、size、SHA-256。
 - symlink 记录 target。
 - path validation：拒绝绝对路径、`..`、NUL、`.git`、重复路径、ancestor 冲突。
@@ -276,7 +277,7 @@ Git tracked paths + Git 未忽略的 untracked paths
 已实现：
 
 - restore 在应用目标前执行内部 pre-restore save。
-- pre-restore checkpoint 使用同一 manifest 和 Fossil 存储机制。
+- pre-restore checkpoint 使用同一 manifest 和 Fossil 存储机制，并记录触发命令 `restore`。
 - restore 成功后输出 pre-restore 和目标 checkpoint ID。
 - restore 失败后尝试 materialize pre-restore 并 rollback。
 - rollback 成功时报告 restore 失败但工作区已恢复。
@@ -350,7 +351,7 @@ Git tracked paths + Git 未忽略的 untracked paths
 
 - save 输出短 ID 和 message。
 - restore 输出 pre-restore 和 target ID。
-- list 输出 ID / CREATED / SOURCE / MESSAGE。
+- list 输出 ID / CREATED / SOURCE / MESSAGE；CREATED 使用本机时区但不显示 UTC offset，自动 checkpoint 的 SOURCE 形如 `pre-restore:restore`。
 - show 输出 metadata 摘要。
 - 不因 HEAD / branch / commit 差异警告或拒绝。
 - 不要求 `--force`。

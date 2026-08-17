@@ -14,14 +14,14 @@ Checkpoint 是当前 worktree 中受管理文件的完整内容快照。
 
 ```bash
 git chkpt save
-git chkpt list
+git chkpt list    # alias: ls
 git chkpt show
 git chkpt diff
 git chkpt restore
-git chkpt delete
+git chkpt delete  # alias: rm
 ```
 
-`git-chkpt` 使用 Fossil SCM 作为本地 checkpoint 存储后端。
+`git-chkpt` 使用 Fossil SCM 作为本地 checkpoint 存储后端；默认构建应能自动获取官方 Fossil 预编译包，用户不应需要单独安装系统级 `fossil`。
 
 Fossil repository 属于当前 worktree，存储在该 worktree 专属 Git administrative directory 下的私有命名空间中。
 
@@ -164,7 +164,7 @@ Checkpoint 不包含：
 
 执行 restore 前，工具自动保存的当前 managed universe 完整快照。
 
-Pre-restore checkpoint 与手动 checkpoint 使用相同的数据格式和存储机制，仅来源字段不同。
+Pre-restore checkpoint 与手动 checkpoint 使用相同的数据格式和存储机制，来源字段会标明它是自动生成，并记录触发它的命令。
 
 它的目的不是审计，而是确保 restore 可逆。
 
@@ -462,7 +462,7 @@ git-chkpt/
 
 Fossil 是唯一支持的 checkpoint 存储后端。
 
-实现 MAY 直接调用 Fossil CLI，也 MAY 使用稳定的 Fossil 接口，但 MUST 保持下列语义：
+实现 MAY 直接调用自动下载/缓存的 Fossil CLI、随包发布的 Fossil CLI sidecar，也 MAY 使用稳定的 Fossil 接口，但 MUST 保持下列语义：
 
 - 每个完整 checkpoint 对应一个 Fossil check-in。
 - Fossil check-in hash 是 checkpoint 的内部完整 ID。
@@ -486,6 +486,7 @@ Checkpoint 的完整 ID MUST 为对应 Fossil check-in 的完整 hash。
 git chkpt show 4f18ac9
 git chkpt restore 4f18ac9
 git chkpt delete 4f18ac9
+git chkpt rm 4f18ac9
 ```
 
 解析规则：
@@ -654,11 +655,11 @@ Manifest SHOULD 不记录：
 
 ```bash
 git chkpt save [MESSAGE]
-git chkpt list
+git chkpt list    # alias: ls
 git chkpt show [CHECKPOINT]
 git chkpt diff [CHECKPOINT]
 git chkpt restore [CHECKPOINT]
-git chkpt delete <CHECKPOINT>...
+git chkpt delete <CHECKPOINT>...  # alias: rm
 ```
 
 快捷形式：
@@ -1021,7 +1022,9 @@ build/cache.bin     preserved
 
 ```bash
 git chkpt delete 4f18ac9
+git chkpt rm 4f18ac9
 git chkpt delete 4f18ac9 92bcec1
+git chkpt rm 4f18ac9 92bcec1
 ```
 
 语义：
@@ -1067,6 +1070,7 @@ git chkpt
 git chkpt save
 git chkpt restore
 git chkpt delete
+git chkpt rm
 ```
 
 如果私有目录不存在，实现 MAY 自动初始化。
@@ -1382,7 +1386,7 @@ git chkpt save
     保存当前 worktree 的完整受管理文件世界。
     不改变工作区，不改变 Git。
 
-git chkpt list
+git chkpt list / git chkpt ls
     列出当前 worktree 的 checkpoint。
 
 git chkpt show
@@ -1396,7 +1400,7 @@ git chkpt restore
     删除目标中不存在的受管理文件。
     不处理 ignored 文件和 .git。
 
-git chkpt delete
+git chkpt delete / git chkpt rm
     删除不再需要的 checkpoint。
 ```
 
