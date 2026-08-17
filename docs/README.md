@@ -9,6 +9,10 @@
   - 包含长期契约、设计倾向、开放问题。
   - 不保证全部已实现。
 
+- `PRODUCT_SPEC_COVERAGE.md`
+  - 产品草案覆盖矩阵。
+  - 对照 `PRODUCT_SPEC_DRAFT.md` 标出完整实现、部分实现、未实现和开放问题。
+
 - `IMPLEMENTATION_SPEC.md`
   - 当前实现规格。
   - 描述代码现在实际承诺和验证的行为。
