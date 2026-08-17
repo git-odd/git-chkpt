@@ -405,6 +405,10 @@ fn fossil_program() -> Result<PathBuf> {
         return Ok(sidecar);
     }
 
+    if let Some(path_bin) = path_fossil() {
+        return Ok(path_bin);
+    }
+
     #[cfg(feature = "auto-fossil")]
     if let Some(auto) = auto_fossil()? {
         return Ok(auto);
@@ -420,8 +424,40 @@ fn fossil_program() -> Result<PathBuf> {
         .collect::<Vec<_>>()
         .join(", ");
     bail!(
-        "fossil-unavailable: packaged Fossil sidecar not found and automatic Fossil provisioning is unavailable for this target; expected one of: {expected}, or set GIT_CHKPT_FOSSIL"
+        "fossil-unavailable: packaged Fossil sidecar not found, system fossil not found in PATH, and automatic Fossil provisioning is unavailable for this target; expected one of: {expected}, fossil in PATH, or set GIT_CHKPT_FOSSIL"
     )
+}
+
+fn path_fossil() -> Option<PathBuf> {
+    let path_var = env::var_os("PATH")?;
+    let binary_name = fossil_binary_name();
+    for dir in env::split_paths(&path_var) {
+        let candidate = dir.join(binary_name);
+        if is_executable_file(&candidate) {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = fs::metadata(path) {
+        meta.is_file() && (meta.permissions().mode() & 0o111 != 0)
+    } else {
+        false
+    }
+}
+
+#[cfg(not(any(windows, unix)))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
 }
 
 fn packaged_fossil_sidecar() -> Result<Option<PathBuf>> {

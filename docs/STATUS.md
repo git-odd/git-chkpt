@@ -25,7 +25,7 @@
 - restore 不主动修改 Git index、HEAD、refs。
 - ignored 文件不被保存，也不被 restore 删除。
 - submodule / nested Git repository 内部内容不被父项目 checkpoint 递归管理。
-- 自动获取或使用随包发布的 Fossil CLI；用户不需要单独安装系统级 `fossil`。
+- 支持使用系统 `PATH`、随包发布的 Fossil CLI 或自动获取的 Fossil 预编译包；用户不需要强制单独安装系统级 `fossil`。
 - Fossil autosync 显式关闭；不配置 remote；不执行网络同步。
 
 ## 存储位置

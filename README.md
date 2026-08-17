@@ -1,155 +1,62 @@
 # git-chkpt
 
-本地 Git worktree checkpoint 工具。
+本地 Git 工作区检查点工具。
 
-`git-chkpt` 用来在还不想 commit、stash 或切 branch 时，快速保存当前工作区文件现场，并在需要时完整恢复。
+在还不打算提交（commit）、暂存（stash）或切换分支时，快速保存当前工作区的文件现场，并在需要时一键完整恢复。
 
-## 当前状态
+---
 
-这是一个可运行的本地原型，已经支持：
+## 为什么需要
+
+在使用 AI 辅助编程、进行大规模重构或排查复杂问题时，我们经常需要频繁试验：
+
+- **比 `git stash` 更自由**：不强制要求工作区干净，不与暂存区（index）冲突，支持直观的命名与多版本时间线。
+- **比临时 commit 更干净**：不产生无意义的 commit，不污染 Git 历史与 commit log。
+- **自带反悔机制**：每次 `restore` 前都会自动为当前现场生成检查点，随时可以撤销恢复。
+
+---
+
+## 快速上手
+
+在任意 Git 仓库的工作区中直接运行：
+
+### 1. 保存当前现场 (Save)
 
 ```bash
+# 快速存档（默认命令）
 git chkpt
-git chkpt save [MESSAGE]
-git chkpt list    # alias: ls
-git chkpt show [CHECKPOINT]
-git chkpt diff [CHECKPOINT]
-git chkpt restore [CHECKPOINT]
-git chkpt delete <CHECKPOINT>...  # alias: rm
+
+# 附带备注信息
+git chkpt save "重构解析器前"
 ```
 
-默认 `git chkpt` 等价于 `git chkpt save`。
-
-## 适合场景
-
-比如你正在让 AI 或 IDE 大改代码：
-
-```bash
-git chkpt save "before parser refactor"
-```
-
-然后放心改。改坏了：
-
-```bash
-git chkpt restore
-```
-
-restore 前会自动保存当前现场为一个 pre-restore checkpoint，所以恢复操作本身也可以反悔。
-
-## 安装
-
-需要：
-
-- Git
-- 网络访问 Fossil 官方下载站（仅首次自动准备 Fossil 时需要）
-- Rust / Cargo（仅从源码构建或 `cargo install` 时需要）
-
-`cargo install` 后可直接运行：
-
-```bash
-cargo install --path .
-# 或发布后：cargo install git-chkpt
-```
-
-用户不需要单独安装 Fossil 到系统 `PATH`。运行时查找顺序：
-
-1. `GIT_CHKPT_FOSSIL` 指定的程序路径。
-2. `git-chkpt` 二进制旁边的 sidecar：同目录、`bin/`、`sidecar/`、`sidecars/`。
-3. 默认启用的 `auto-fossil`：首次需要 Fossil 时按当前平台下载官方预编译包（带进度提示），校验 SHA3-256 后缓存到用户 cache 目录。下载遵循标准代理环境变量（`HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY`）。
-
-可用 `--no-default-features` 关闭自动下载；此时必须提供 sidecar 或 `GIT_CHKPT_FOSSIL`。开发/测试可用 `GIT_CHKPT_FOSSIL_RUNTIME_CACHE` 指定自动下载缓存目录。
-
-构建：
-
-```bash
-cargo build --release
-```
-
-把生成的二进制放到 `PATH` 中，并保持名字为：
-
-```text
-git-chkpt
-```
-
-Git 会把：
-
-```bash
-git chkpt
-```
-
-自动转发为外部命令：
-
-```bash
-git-chkpt
-```
-
-Windows 下构建产物通常在：
-
-```text
-target/release/git-chkpt.exe
-```
-
-## 快速开始
-
-进入任意非 bare Git worktree：
-
-```bash
-cd your-repo
-```
-
-保存当前文件现场：
-
-```bash
-git chkpt save "before risky edit"
-```
-
-输出类似：
-
-```text
-Saved checkpoint 4f18ac932e7d
-Message: before risky edit
-```
-
-列出 checkpoint：
+### 2. 查看检查点列表 (List)
 
 ```bash
 git chkpt ls
+# 或: git chkpt list
 ```
 
-`git chkpt list` 也可用。
-
-输出类似：
+输出示例：
 
 ```text
-ID          CREATED                 SOURCE              MESSAGE
-4f18ac932e  2026-08-16 10:21:13.052 manual              before risky edit
+ID          CREATED                 SOURCE    MESSAGE
+4f18ac932e  2026-08-16 10:21:13.052 manual    重构解析器前
 ```
 
-查看最新 checkpoint：
+### 3. 查看改动差异 (Diff)
+
+查看当前工作区与最新（或指定）检查点的文件变动摘要：
 
 ```bash
-git chkpt show
-```
-
-查看指定 checkpoint：
-
-```bash
-git chkpt show 4f18ac93
-```
-
-比较最新 checkpoint 与当前工作区：
-
-```bash
+# 比较最新检查点与当前工作区
 git chkpt diff
+
+# 比较指定检查点与当前工作区
+git chkpt diff 4f18ac93
 ```
 
-输出方向是：
-
-```text
-checkpoint -> current workspace
-```
-
-示例：
+输出示例：
 
 ```text
 M  src/parser.rs
@@ -157,139 +64,104 @@ A  tests/parser_cases.rs
 D  notes/old-plan.md
 ```
 
-恢复最新 checkpoint：
+### 4. 恢复现场 (Restore)
+
+恢复到最新或指定的检查点：
 
 ```bash
+# 恢复到最新检查点
 git chkpt restore
-```
 
-恢复指定 checkpoint：
-
-```bash
+# 恢复到指定检查点
 git chkpt restore 4f18ac93
 ```
 
-成功输出类似：
+> **安全提示**：执行 `restore` 前，工具会自动将当前工作区保存为一个 `pre-restore` 检查点。如果不小心恢复错误，直接再次 `git chkpt restore` 即可回到恢复前的状态。
 
-```text
-Saved current workspace as checkpoint e205be92773a
-Restored checkpoint 4f18ac932e7d
+### 5. 查看检查点详情 (Show)
+
+```bash
+# 查看最新检查点详情
+git chkpt show
+
+# 查看指定检查点详情
+git chkpt show 4f18ac93
 ```
 
-删除 checkpoint 的公开可见性：
+### 6. 清理检查点 (Delete)
 
 ```bash
 git chkpt rm 4f18ac93
+# 或: git chkpt delete 4f18ac93
 ```
 
-`git chkpt delete` 也可用。
+---
 
-## 它会保存什么
+## 典型工作流
 
-保存范围是当前 Git worktree 的 managed universe：
-
-- Git tracked 文件中当前实际存在的文件。
-- Git 未忽略的 untracked 文件。
-
-不会保存：
-
-- `.git` 或 Git administrative directory。
-- ignored 文件。
-- submodule 内部内容。
-- nested Git repository 内部内容。
-- worktree 根目录外的内容。
-- Git HEAD、branch、index、refs、hooks、config、reflog、merge/rebase 状态。
-
-## restore 会做什么
-
-`restore` 会把当前 managed universe 变成目标 checkpoint 的文件世界：
-
-- 目标中存在的文件会被创建或替换。
-- 目标中不存在、但当前受管理的路径会被删除。
-- 文件 / 目录类型变化会恢复。
-- ignored 文件不会被删除。
-- submodule / nested Git repository 内部不会被父项目 restore 修改。
-- Git index / HEAD / refs 不会被主动修改。
-
-restore 前会自动执行一次内部 save，创建 pre-restore checkpoint；这个自动 checkpoint 的 `SOURCE` 会显示为 `pre-restore:restore`，表示由 `restore` 命令触发。
-
-## 常用工作流
-
-### 大改前存档
+### 场景 A：AI 辅助编程与重构试错
 
 ```bash
-git chkpt save "before ai rewrite"
-# run AI / refactor / experiment
+# 1. 在 AI 大幅修改代码前快速存档
+git chkpt save "AI 重构前"
+
+# 2. 运行 AI 工具或编写实验性代码
+# ... 编写代码、运行测试 ...
+
+# 3. 检查代码改动概况
 git chkpt diff
+
+# 4. 如果实验不满意，一键撤销所有改动
+git chkpt restore
 ```
 
-满意后可以正常 commit：
+### 场景 B：恢复后反悔
 
 ```bash
-git add .
-git commit -m "rewrite parser"
-```
-
-checkpoint 不进入 Git 历史。你可以之后删除它：
-
-```bash
+# 恢复了某个旧版本后，发现刚才未提交的修改依然需要
 git chkpt ls
-git chkpt rm <id>
-```
-
-### 恢复后反悔
-
-```bash
-git chkpt restore <old-id>
-```
-
-如果发现还是恢复前的状态好，直接恢复最新的 pre-restore checkpoint：
-
-```bash
-git chkpt ls
+# 找到自动生成的 pre-restore 检查点并恢复
 git chkpt restore <pre-restore-id>
 ```
 
-## 每个 worktree 独立
+---
 
-如果你使用 Git linked worktree：
+## 工作边界与特性
 
+- **保存范围**：
+  - Git 已追踪的文件（tracked）。
+  - Git 未忽略的新增文件（untracked）。
+- **不受影响的内容**：
+  - `.git` 内部状态（HEAD、分支、commit 历史、暂存区 index 等保持原样）。
+  - `.gitignore` 忽略的文件与目录（如编译产物、本地缓存等不会被保存，也不会在恢复时被删除）。
+  - Submodule 及嵌套 Git 仓库的内部文件。
+- **独立隔离**：
+  - 每个 Git worktree（包括 `git worktree add` 创建的 linked worktree）拥有完全独立的检查点存储，互不干扰。
+
+---
+
+## 安装
+
+### 前置要求
+- 系统已安装 Git
+
+### 通过 Cargo 安装
 ```bash
-git worktree add ../feature feature
+cargo install --path .
+# 或发布后：cargo install git-chkpt
 ```
 
-主 worktree 和 linked worktree 的 checkpoint 是隔离的：
+确保 Cargo 二进制目录在系统 `PATH` 中。安装后，Git 会自动将 `git chkpt` 识别为外部命令。
 
-- 在哪个 worktree 执行 `git chkpt save`，checkpoint 就属于哪个 worktree。
-- `git chkpt ls` / `git chkpt list` 只列当前 worktree 的 checkpoint。
-- 不能跨 worktree 查看或恢复。
+---
 
-## 错误和安全性
+## 进阶文档
 
-常见错误：
+关于架构设计、内部存储原理及详细规格，请参阅 [`docs/`](docs/) 目录：
 
-- `not-a-git-worktree`：当前目录不在 Git worktree 中。
-- `bare-repository`：不支持 bare repository。
-- `no-checkpoint`：当前 worktree 还没有 checkpoint。
-- `checkpoint-not-found`：ID 或前缀找不到。
-- `ambiguous-checkpoint`：短 ID 前缀不唯一。
-- `workspace-changed`：save 期间文件集合或文件内容发生变化，请重试。
-- `repository-busy`：另一个 checkpoint 操作正在进行。
-- `corrupt-checkpoint`：checkpoint manifest 或 payload 校验失败。
-
-## 重要限制
-
-- 这是本地临时 checkpoint，不是备份系统。
-- checkpoint 随 `.git` 生命周期走；删除 `.git` 后不可恢复。
-- 不支持云同步、remote、导入导出、跨设备恢复。
-- 不支持单文件恢复。
-- 不恢复 Git index 或 staged/unstaged 边界。
-- `diff` 当前是 A/M/D 摘要，不是完整 unified diff。
-- delete 当前是逻辑删除，不保证立刻释放磁盘空间。
-
-## 开发验证
-
-```bash
-cargo test
-cargo clippy --all-targets -- -D warnings
-```
+- [技术设计与架构说明](docs/TECHNICAL_NOTES.md)
+- [当前实现规格 (Implementation Spec)](docs/IMPLEMENTATION_SPEC.md)
+- [产品目标草案 (Product Spec Draft)](docs/PRODUCT_SPEC_DRAFT.md)
+- [产品草案覆盖矩阵 (Product Spec Coverage)](docs/PRODUCT_SPEC_COVERAGE.md)
+- [项目当前状态 (Status)](docs/STATUS.md)
+- [命令命名评估 (Naming Evaluation)](docs/NAMING_EVALUATION.md)

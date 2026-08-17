@@ -21,7 +21,7 @@ git chkpt restore
 git chkpt delete  # alias: rm
 ```
 
-`git-chkpt` 使用 Fossil SCM 作为本地 checkpoint 存储后端；默认构建应能自动获取官方 Fossil 预编译包，用户不应需要单独安装系统级 `fossil`。
+`git-chkpt` 使用 Fossil SCM 作为本地 checkpoint 存储后端；支持系统 `PATH`、随包 sidecar 或按需自动获取官方 Fossil 预编译包，用户不应需要强制单独安装系统级 `fossil`。
 
 Fossil repository 属于当前 worktree，存储在该 worktree 专属 Git administrative directory 下的私有命名空间中。
 
@@ -462,7 +462,7 @@ git-chkpt/
 
 Fossil 是唯一支持的 checkpoint 存储后端。
 
-实现 MAY 直接调用自动下载/缓存的 Fossil CLI、随包发布的 Fossil CLI sidecar，也 MAY 使用稳定的 Fossil 接口，但 MUST 保持下列语义：
+实现 MAY 直接调用系统 PATH 中的 Fossil CLI、随包发布的 Fossil CLI sidecar 或自动下载/缓存的 Fossil CLI，也 MAY 使用稳定的 Fossil 接口，但 MUST 保持下列语义：
 
 - 每个完整 checkpoint 对应一个 Fossil check-in。
 - Fossil check-in hash 是 checkpoint 的内部完整 ID。

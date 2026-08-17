@@ -20,7 +20,7 @@ git ls-files -o --exclude-standard -z
 - submodule gitlink 能通过 mode `160000` 识别。
 - 不需要自己实现 `.gitignore` parser。
 
-Fossil 则被用作本地内容数据库。默认构建会在首次需要 Fossil 时自动下载、校验并缓存官方预编译包；发行包仍可以把 sidecar binary 放在 `git-chkpt` 旁边来覆盖自动下载路径。
+Fossil 则被用作本地内容数据库。运行时优先使用 `GIT_CHKPT_FOSSIL`、随包 sidecar 或系统 `PATH` 中的 `fossil`；若均未找到，默认构建会在首次需要 Fossil 时自动下载、校验并缓存官方预编译包。
 
 - 每个 checkpoint 是一个 Fossil check-in。
 - Fossil check-in hash 是 checkpoint 内部完整 ID。

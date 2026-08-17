@@ -453,3 +453,34 @@ fn nested_git_repository_is_not_snapshotted_or_restored() {
         "nested B\n"
     );
 }
+
+#[test]
+fn fossil_resolves_from_path_without_auto_download() {
+    let bin = env!("CARGO_BIN_EXE_git-chkpt");
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path().join("repo");
+    let cache_dir = temp.path().join("cache");
+
+    init_repo(&repo);
+    write(&repo.join("a.txt"), "A\n");
+
+    let mut command = Command::new(bin);
+    command
+        .current_dir(&repo)
+        .args(["save", "path resolution test"])
+        .env_remove("GIT_CHKPT_FOSSIL")
+        .env("GIT_CHKPT_FOSSIL_RUNTIME_CACHE", &cache_dir);
+    let output = command.output().expect("execute git-chkpt");
+    if !output.status.success() {
+        panic!(
+            "failed: stdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Saved checkpoint"), "{stdout}");
+    assert!(!cache_dir.exists() || fs::read_dir(&cache_dir).unwrap().next().is_none());
+}
+
