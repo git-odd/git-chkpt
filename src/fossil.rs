@@ -160,7 +160,25 @@ impl Store {
     }
 
     pub fn commit_staging(&self, comment: &str) -> Result<String> {
-        self.clear_checkout_payload()?;
+        if self.checkout.exists() {
+            let _ = fs::remove_dir_all(&self.checkout);
+        }
+        fs::create_dir_all(&self.checkout)
+            .with_context(|| format!("create {}", self.checkout.display()))?;
+        fossil(
+            Some(&self.checkout),
+            Some(&self.base),
+            [
+                OsStr::new("open"),
+                self.repo.as_os_str(),
+                OsStr::new("--empty"),
+                OsStr::new("--nested"),
+                OsStr::new("--nosync"),
+                OsStr::new("--force"),
+            ],
+        )
+        .context("fossil open failed")?;
+
         fs::copy(
             self.staging.join(MANIFEST_FILE),
             self.checkout.join(MANIFEST_FILE),
@@ -347,28 +365,6 @@ impl Store {
 
     fn checkout_marker_exists(&self) -> bool {
         self.checkout.join(".fslckout").is_file() || self.checkout.join("_FOSSIL_").is_file()
-    }
-
-    fn clear_checkout_payload(&self) -> Result<()> {
-        fs::create_dir_all(&self.checkout)
-            .with_context(|| format!("create {}", self.checkout.display()))?;
-        for entry in fs::read_dir(&self.checkout)
-            .with_context(|| format!("read {}", self.checkout.display()))?
-        {
-            let entry = entry?;
-            let name = entry.file_name();
-            if name == ".fslckout" || name == "_FOSSIL_" {
-                continue;
-            }
-            let path = entry.path();
-            let file_type = entry.file_type()?;
-            if file_type.is_dir() {
-                fs::remove_dir_all(&path).with_context(|| format!("remove {}", path.display()))?;
-            } else {
-                fs::remove_file(&path).with_context(|| format!("remove {}", path.display()))?;
-            }
-        }
-        Ok(())
     }
 }
 
