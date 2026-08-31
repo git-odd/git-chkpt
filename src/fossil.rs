@@ -206,7 +206,6 @@ impl Store {
             OsStr::new("ci"),
             OsStr::new("--format"),
             OsStr::new("%H"),
-            OsStr::new("-q"),
         ])?;
         let mut seen = BTreeSet::new();
         let mut hashes = Vec::new();
@@ -330,7 +329,6 @@ impl Store {
             OsStr::new("ci"),
             OsStr::new("--format"),
             OsStr::new("%H"),
-            OsStr::new("-q"),
         ])?;
         for line in String::from_utf8_lossy(&out).lines() {
             let hash = line.trim();

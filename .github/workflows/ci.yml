@@ -64,10 +64,8 @@ jobs:
         shell: pwsh
         run: |
           choco install fossil --no-progress
-          $chocoBin = "C:\ProgramData\chocolatey\bin"
-          if (Test-Path $chocoBin) {
-            echo "$chocoBin" >> $env:GITHUB_PATH
-          }
+          "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "C:\tools\fossil" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Build All Binaries
         run: cargo build --bins
