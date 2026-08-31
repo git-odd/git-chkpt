@@ -119,6 +119,21 @@ impl Store {
             OsStr::new("off"),
         ])
         .context("failed to disable Fossil autosync")?;
+        let _ = self.fossil_checkout([
+            OsStr::new("settings"),
+            OsStr::new("crlf-glob"),
+            OsStr::new("*"),
+        ]);
+        let _ = self.fossil_checkout([
+            OsStr::new("settings"),
+            OsStr::new("binary-glob"),
+            OsStr::new("*"),
+        ]);
+        let _ = self.fossil_checkout([
+            OsStr::new("settings"),
+            OsStr::new("allow-symlinks"),
+            OsStr::new("on"),
+        ]);
         fs::write(&self.version, b"1\n")
             .with_context(|| format!("write {}", self.version.display()))?;
         Ok(())
@@ -164,9 +179,8 @@ impl Store {
             OsStr::new("--allow-empty"),
             OsStr::new("--nosync"),
             OsStr::new("--no-warnings"),
-            OsStr::new("--no-verify"),
-            OsStr::new("--no-verify-comment"),
             OsStr::new("--no-prompt"),
+            OsStr::new("-f"),
             OsStr::new("--user-override"),
             OsStr::new("git-chkpt"),
             OsStr::new("-m"),

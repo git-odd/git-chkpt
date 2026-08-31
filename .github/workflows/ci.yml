@@ -61,7 +61,13 @@ jobs:
 
       - name: Install Fossil (Windows)
         if: runner.os == 'Windows'
-        run: choco install fossil --no-progress
+        shell: pwsh
+        run: |
+          choco install fossil --no-progress
+          $chocoBin = "C:\ProgramData\chocolatey\bin"
+          if (Test-Path $chocoBin) {
+            echo "$chocoBin" >> $env:GITHUB_PATH
+          }
 
       - name: Build All Binaries
         run: cargo build --bins
