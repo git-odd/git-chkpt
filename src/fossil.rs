@@ -82,6 +82,7 @@ impl Store {
         if !self.repo.exists() {
             fossil(
                 None,
+                Some(&self.base),
                 [
                     OsStr::new("init"),
                     OsStr::new("--admin-user"),
@@ -101,6 +102,7 @@ impl Store {
                 .with_context(|| format!("create {}", self.checkout.display()))?;
             fossil(
                 Some(&self.checkout),
+                Some(&self.base),
                 [
                     OsStr::new("open"),
                     self.repo.as_os_str(),
@@ -340,7 +342,7 @@ impl Store {
     }
 
     fn fossil_checkout<const N: usize>(&self, args: [&OsStr; N]) -> Result<Vec<u8>> {
-        fossil(Some(&self.checkout), args)
+        fossil(Some(&self.checkout), Some(&self.base), args)
     }
 
     fn checkout_marker_exists(&self) -> bool {
@@ -388,12 +390,19 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         .with_context(|| format!("persist {}", path.display()))
 }
 
-fn fossil<const N: usize>(cwd: Option<&Path>, args: [&OsStr; N]) -> Result<Vec<u8>> {
+fn fossil<const N: usize>(
+    cwd: Option<&Path>,
+    home: Option<&Path>,
+    args: [&OsStr; N],
+) -> Result<Vec<u8>> {
     let fossil = fossil_program()?;
     let mut command = Command::new(&fossil);
     command.args(args);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
+    }
+    if let Some(home) = home {
+        command.env("FOSSIL_HOME", home);
     }
     let output = command
         .output()
