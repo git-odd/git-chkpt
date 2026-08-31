@@ -2,9 +2,11 @@
 name = "git-chkpt"
 version = "0.1.0"
 edition = "2024"
+authors = ["iroha3"]
 license = "MIT OR Apache-2.0"
-description = "Lightweight, local checkpoint tool for Git worktrees"
-repository = "https://github.com/iroha3/git-chkpt"
+description = "Lightweight, local checkpoint tool for Git worktrees, powered by Fossil"
+repository = "https://github.com/git-odd/git-chkpt"
+homepage = "https://github.com/git-odd/git-chkpt"
 readme = "README.md"
 keywords = ["git", "checkpoint", "backup", "vcs", "productivity"]
 categories = ["command-line-utilities", "development-tools"]

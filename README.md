@@ -1,18 +1,25 @@
-# git-chkpt
-
 <div align="center">
 
-**English** | [简体中文](README_zh.md)
+# ⏱️ git-chkpt
+
+**Lightweight, local checkpoint tool for Git worktrees, powered by Fossil.**
+
+[![Organization](https://img.shields.io/badge/Org-git--odd-blue?style=flat-square&logo=github)](https://github.com/git-odd)
+[![Suite](https://img.shields.io/badge/Suite-git--odd%20Ecosystem-purple?style=flat-square&logo=git)](https://github.com/git-odd)
+[![Crates.io](https://img.shields.io/crates/v/git-chkpt.svg?style=flat-square)](https://crates.io/crates/git-chkpt)
+[![License](https://img.shields.io/badge/License-MIT%20%2F%20Apache--2.0-orange?style=flat-square)](LICENSE-MIT)
+
+[English](README.md) | [简体中文](README_zh.md)
 
 </div>
 
-Lightweight, local checkpoint tool for Git worktrees, powered by [Fossil](https://fossil-scm.org/).
+> Part of the [**`git-odd`**](https://github.com/git-odd) suite — *solving odd Git problems in odd ways.*
 
 Quickly save snapshots of your working tree files when you are not ready to commit, stash, or switch branches—and restore them completely whenever needed. Supports both the primary command `git chkpt` and its full alias `git checkpoint`.
 
 ---
 
-## Why git-chkpt?
+## ✨ Why git-chkpt?
 
 When working with AI coding assistants, performing large refactorings, or debugging complex issues, you often need to experiment rapidly:
 
@@ -23,7 +30,29 @@ When working with AI coding assistants, performing large refactorings, or debugg
 
 ---
 
-## Quick Start
+## 🚀 Installation
+
+### Via Cargo (Recommended)
+
+```bash
+cargo install git-chkpt
+```
+
+Ensure `~/.cargo/bin` is in your system `PATH`. Cargo will automatically install both `git-chkpt` and `git-checkpoint`.
+
+### From Git Repository
+
+```bash
+cargo install --git https://github.com/git-odd/git-chkpt.git
+```
+
+### Pre-built Binaries from GitHub Releases
+
+Download the pre-compiled archive for your OS from the [Releases page](https://github.com/git-odd/git-chkpt/releases) and place the binaries in your system `PATH`. The archive includes the storage sidecar for zero-network, fully offline usage.
+
+---
+
+## 📖 Quick Start
 
 Run directly inside any non-bare Git repository (`git chkpt` and `git checkpoint` are identical):
 
@@ -107,7 +136,7 @@ git chkpt rm 4f18ac93
 
 ---
 
-## Typical Workflows
+## 🔄 Typical Workflows
 
 ### Scenario A: AI-Assisted Refactoring & Safe Experimentation
 
@@ -136,7 +165,7 @@ git chkpt restore <pre-restore-id>
 
 ---
 
-## Boundaries & Characteristics
+## 🛡️ Boundaries & Characteristics
 
 - **Included in Checkpoints**:
   - All Git tracked files.
@@ -148,27 +177,7 @@ git chkpt restore <pre-restore-id>
 - **Worktree Isolation**:
   - Each Git worktree (including linked worktrees created via `git worktree add`) has completely isolated checkpoint storage.
 
----
-
-## Installation
-
-### Prerequisites
-- Git installed on your system
-
-### Option 1: Pre-built Binaries from GitHub Releases (Recommended)
-Download the pre-compiled archive for your OS from the [Releases page](https://github.com/iroha3/git-chkpt/releases) and place the binaries in your system `PATH`. The archive includes the storage sidecar for zero-network, fully offline usage.
-
-### Option 2: Build & Install via Cargo
-```bash
-cargo install --path .
-# or once published: cargo install git-chkpt
-```
-
-Ensure `~/.cargo/bin` is in your system `PATH`. Cargo will automatically install both `git-chkpt` and `git-checkpoint`.
-
----
-
-## Deep Dive & Documentation
+## 📚 Deep Dive & Documentation
 
 For architecture design, storage mechanisms, and formal specifications, please refer to the [`docs/`](docs/) directory:
 
@@ -181,12 +190,9 @@ For architecture design, storage mechanisms, and formal specifications, please r
 
 ---
 
-## License
+## 📄 License
 
-This project is dual-licensed under either of:
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
-
-at your option.
+Dual-licensed under either of:
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+* MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 

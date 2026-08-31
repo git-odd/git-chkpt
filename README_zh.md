@@ -1,39 +1,68 @@
-# git-chkpt
-
 <div align="center">
 
-[English](README.md) | **简体中文**
+# ⏱️ git-chkpt
+
+**基于 Fossil 引擎、轻量免配置的 Git 工作区快速存档与回滚工具。**
+
+[![Organization](https://img.shields.io/badge/Org-git--odd-blue?style=flat-square&logo=github)](https://github.com/git-odd)
+[![Suite](https://img.shields.io/badge/Suite-git--odd%20Ecosystem-purple?style=flat-square&logo=git)](https://github.com/git-odd)
+[![Crates.io](https://img.shields.io/crates/v/git-chkpt.svg?style=flat-square)](https://crates.io/crates/git-chkpt)
+[![License](https://img.shields.io/badge/License-MIT%20%2F%20Apache--2.0-orange?style=flat-square)](LICENSE-MIT)
+
+[English](README.md) | [简体中文](README_zh.md)
 
 </div>
 
-本地 Git 工作区检查点工具，底层由 [Fossil](https://fossil-scm.org/) 驱动。
+> 隶属于 [**`git-odd`**](https://github.com/git-odd) 工具家族 — *用奇怪的方式解决 Git 奇怪的问题。*
 
-在还不打算提交（commit）、暂存（stash）或切换分支时，快速保存当前工作区的文件现场，并在需要时一键完整恢复。支持主命令 `git chkpt` 与完整别名 `git checkpoint`。
-
----
-
-## 为什么需要
-
-在使用 AI 辅助编程、进行大规模重构或排查复杂问题时，我们经常需要频繁试验：
-
-- **由 Fossil 强力驱动**：底层使用历经考验的 [Fossil SCM](https://fossil-scm.org/) 存储引擎，实现高效内容去重与可靠快照，完全不污染 Git 仓库历史。
-- **比 `git stash` 更自由**：不强制要求工作区干净，不与暂存区（index）冲突，支持直观的命名与多版本时间线。
-- **比临时 commit 更干净**：不产生无意义的 commit，不污染 Git 历史与 commit log。
-- **自带反悔机制**：每次 `restore` 前都会自动为当前现场生成检查点，随时可以撤销恢复。
+在开发未完成、不便执行 `git commit`、`git stash` 或切换分支时，随时为工作区文件保存快照（Checkpoint），并在需要时完整还原。支持主命令 `git chkpt` 以及完整别名 `git checkpoint`。
 
 ---
 
-## 快速上手
+## ✨ 为什么选择 git-chkpt？
 
-在任意 Git 仓库的工作区中直接运行（`git chkpt` 与 `git checkpoint` 完全等价）：
+在进行 AI 辅助编程、大规模重构或排查疑难 Bug 时，经常需要快速试错与频繁存档：
 
-### 1. 保存当前现场 (Save)
+- **基于 Fossil 引擎**：底层调用极其可靠的 [Fossil SCM](https://fossil-scm.org/) 存储引擎，实现极速去重与独立快照，与 Git 历史完全隔离。
+- **比 `git stash` 更自由**：不要求工作区干净，不与暂存区（Index）冲突，支持清晰的命名和完整的版本时间线。
+- **比临时提交更纯净**：不会在 Git 提交历史中留下任何杂乱的 "wip"、"temp" 提交。
+- **自带反悔机制（安全网）**：每次执行 `restore` 恢复时，都会自动将当前工作区保存为一个 `pre-restore` 检查点，任何恢复操作都可一键反悔。
+
+---
+
+## 🚀 安装指南
+
+### 方式一：通过 Cargo 安装（推荐）
 
 ```bash
-# 快速存档（默认命令）
+cargo install git-chkpt
+```
+
+确保 Cargo 二进制目录（`~/.cargo/bin`）在系统 `PATH` 中。安装时会自动包含 `git-chkpt` 和 `git-checkpoint` 两个命令。
+
+### 方式二：从 Git 仓库安装
+
+```bash
+cargo install --git https://github.com/git-odd/git-chkpt.git
+```
+
+### 方式三：通过 GitHub Release 下载预编译包（零网络开箱即用）
+
+从 [Releases 页面](https://github.com/git-odd/git-chkpt/releases) 下载对应平台的预编译压缩包，解压后将二进制放入系统 `PATH` 目录即可。压缩包内置了存储引擎 sidecar，完全离线可用。
+
+---
+
+## 📖 快速上手
+
+在任意非 bare Git 仓库根目录或子目录下直接运行（`git chkpt` 与 `git checkpoint` 等效）：
+
+### 1. 保存当前工作区 (Save)
+
+```bash
+# 快速保存（默认命令）
 git chkpt
 
-# 附带备注信息
+# 带描述信息保存
 git chkpt save "重构解析器前"
 
 # 使用完整别名
@@ -107,7 +136,7 @@ git chkpt rm 4f18ac93
 
 ---
 
-## 典型工作流
+## 🔄 典型工作流
 
 ### 场景 A：AI 辅助编程与重构试错
 
@@ -136,7 +165,7 @@ git chkpt restore <pre-restore-id>
 
 ---
 
-## 工作边界与特性
+## 🛡️ 工作边界与特性
 
 - **保存范围**：
   - Git 已追踪的文件（tracked）。
@@ -148,27 +177,7 @@ git chkpt restore <pre-restore-id>
 - **独立隔离**：
   - 每个 Git worktree（包括 `git worktree add` 创建的 linked worktree）拥有完全独立的检查点存储，互不干扰。
 
----
-
-## 安装
-
-### 前置要求
-- 系统已安装 Git
-
-### 方式 1：通过 GitHub Release 下载预编译包（推荐，零网络开箱即用）
-从 [Releases 页面](https://github.com/iroha3/git-chkpt/releases) 下载对应平台的预编译压缩包，解压后将二进制放入系统 `PATH` 目录即可。压缩包内置了存储引擎 sidecar，完全离线可用。
-
-### 方式 2：通过 Cargo 安装
-```bash
-cargo install --path .
-# 或发布后：cargo install git-chkpt
-```
-
-确保 Cargo 二进制目录（`~/.cargo/bin`）在系统 `PATH` 中。安装时会自动包含 `git-chkpt` 和 `git-checkpoint` 两个命令。
-
----
-
-## 进阶文档
+## 📚 进阶文档
 
 关于架构设计、内部存储原理及详细规格，请参阅 [`docs/`](docs/) 目录：
 
@@ -181,10 +190,9 @@ cargo install --path .
 
 ---
 
-## 开源许可证
+## 📄 开源许可证
 
 本项目采用双许可证授权，您可以按需选择以下任一许可使用：
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) 或 <http://www.apache.org/licenses/LICENSE-2.0>)
-- MIT License ([LICENSE-MIT](LICENSE-MIT) 或 <http://opensource.org/licenses/MIT>)
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) 或 <http://www.apache.org/licenses/LICENSE-2.0>)
+* MIT License ([LICENSE-MIT](LICENSE-MIT) 或 <http://opensource.org/licenses/MIT>)
 
