@@ -13,17 +13,29 @@ pub struct GitContext {
 impl GitContext {
     pub fn discover() -> Result<Self> {
         let cwd = std::env::current_dir().context("read current directory")?;
-        let is_bare = match git_stdout(None, ["rev-parse", "--is-bare-repository"]) {
+        let output = match git_stdout(
+            None,
+            [
+                "rev-parse",
+                "--is-bare-repository",
+                "--show-toplevel",
+                "--git-dir",
+            ],
+        ) {
             Ok(value) => value,
             Err(_) => bail!("not-a-git-worktree: git-chkpt requires a Git worktree"),
         };
-        if is_bare.trim() == "true" {
+        let mut lines = output.lines();
+        let is_bare = lines.next().unwrap_or("").trim();
+        if is_bare == "true" {
             bail!("bare-repository: git-chkpt requires a non-bare Git worktree");
         }
 
-        let root_raw = git_stdout(None, ["rev-parse", "--show-toplevel"])
+        let root_raw = lines
+            .next()
             .context("not-a-git-worktree: failed to resolve worktree root")?;
-        let git_dir_raw = git_stdout(None, ["rev-parse", "--git-dir"])
+        let git_dir_raw = lines
+            .next()
             .context("failed to resolve worktree Git administrative directory")?;
 
         let worktree_root = resolve_from(&cwd, root_raw.trim())?;

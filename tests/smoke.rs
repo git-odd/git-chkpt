@@ -498,3 +498,46 @@ fn git_checkpoint_shim_binary_works() {
     let list = run_ok(repo, bin, &["list"]);
     assert!(list.contains("via shim"), "{list}");
 }
+
+#[test]
+fn repo_relocation_preserves_checkpoint_operations() {
+    let bin = env!("CARGO_BIN_EXE_git-chkpt");
+    let temp = tempfile::tempdir().unwrap();
+    let old_repo = temp.path().join("original_repo");
+    let new_repo = temp.path().join("moved_repo");
+
+    init_repo(&old_repo);
+    write(&old_repo.join("file.txt"), "v1\n");
+    let save1 = run_ok(&old_repo, bin, &["save", "first checkpoint"]);
+    let id1 = save_id(&save1);
+
+    // Move the entire repository directory to a new location
+    fs::rename(&old_repo, &new_repo).unwrap();
+
+    // Verify list works and shows previous checkpoint without errors
+    let list = run_ok(&new_repo, bin, &["list"]);
+    assert!(list.contains("first checkpoint"), "{list}");
+    assert!(list.contains(&id1[..8]), "{list}");
+
+    // Verify show works
+    let show = run_ok(&new_repo, bin, &["show", &id1]);
+    assert!(show.contains("first checkpoint"), "{show}");
+
+    // Verify saving a new checkpoint at the new location (which triggers ensure_initialized and commit_staging)
+    write(&new_repo.join("file.txt"), "v2\n");
+    let save2 = run_ok(&new_repo, bin, &[]);
+    assert!(save2.contains("Saved checkpoint"), "{save2}");
+
+    // Verify diff works
+    let diff = run_ok(&new_repo, bin, &["diff", &id1]);
+    assert!(diff.contains("file.txt"), "{diff}");
+
+    // Verify restore works
+    write(&new_repo.join("file.txt"), "v_dirty\n");
+    run_ok(&new_repo, bin, &["restore", &id1]);
+    assert_eq!(
+        fs::read_to_string(new_repo.join("file.txt")).unwrap(),
+        "v1\n"
+    );
+}
+

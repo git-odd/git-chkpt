@@ -71,7 +71,7 @@ impl Store {
     }
 
     pub fn is_initialized(&self) -> bool {
-        self.repo.is_file() && self.checkout_marker_exists()
+        self.repo.is_file()
     }
 
     pub fn ensure_initialized(&self) -> Result<()> {
@@ -79,6 +79,7 @@ impl Store {
         fs::create_dir_all(&self.transactions)
             .with_context(|| format!("create {}", self.transactions.display()))?;
 
+        let needs_setup = !self.repo.exists() || !self.version.exists();
         if !self.repo.exists() {
             fossil(
                 None,
@@ -97,47 +98,33 @@ impl Store {
             .context("fossil-unavailable or fossil init failed")?;
         }
 
-        if !self.checkout_marker_exists() {
-            fs::create_dir_all(&self.checkout)
-                .with_context(|| format!("create {}", self.checkout.display()))?;
-            fossil(
-                Some(&self.checkout),
-                Some(&self.base),
-                [
-                    OsStr::new("open"),
-                    self.repo.as_os_str(),
-                    OsStr::new("--empty"),
-                    OsStr::new("--nested"),
-                    OsStr::new("--nosync"),
-                    OsStr::new("--force"),
-                ],
-            )
-            .context("fossil open failed")?;
-        }
+        self.ensure_checkout()?;
 
-        self.fossil_checkout([
-            OsStr::new("settings"),
-            OsStr::new("autosync"),
-            OsStr::new("off"),
-        ])
-        .context("failed to disable Fossil autosync")?;
-        let _ = self.fossil_checkout([
-            OsStr::new("settings"),
-            OsStr::new("crlf-glob"),
-            OsStr::new("*"),
-        ]);
-        let _ = self.fossil_checkout([
-            OsStr::new("settings"),
-            OsStr::new("binary-glob"),
-            OsStr::new("*"),
-        ]);
-        let _ = self.fossil_checkout([
-            OsStr::new("settings"),
-            OsStr::new("allow-symlinks"),
-            OsStr::new("on"),
-        ]);
-        fs::write(&self.version, b"1\n")
-            .with_context(|| format!("write {}", self.version.display()))?;
+        if needs_setup {
+            self.fossil_checkout([
+                OsStr::new("settings"),
+                OsStr::new("autosync"),
+                OsStr::new("off"),
+            ])
+            .context("failed to disable Fossil autosync")?;
+            let _ = self.fossil_checkout([
+                OsStr::new("settings"),
+                OsStr::new("crlf-glob"),
+                OsStr::new("*"),
+            ]);
+            let _ = self.fossil_checkout([
+                OsStr::new("settings"),
+                OsStr::new("binary-glob"),
+                OsStr::new("*"),
+            ]);
+            let _ = self.fossil_checkout([
+                OsStr::new("settings"),
+                OsStr::new("allow-symlinks"),
+                OsStr::new("on"),
+            ]);
+            fs::write(&self.version, b"1\n")
+                .with_context(|| format!("write {}", self.version.display()))?;
+        }
         Ok(())
     }
 
@@ -159,18 +146,19 @@ impl Store {
         Ok(())
     }
 
-    pub fn commit_staging(&self, comment: &str) -> Result<String> {
+    pub fn reopen_checkout(&self) -> Result<()> {
         if self.checkout.exists() {
             let _ = fs::remove_dir_all(&self.checkout);
         }
         fs::create_dir_all(&self.checkout)
             .with_context(|| format!("create {}", self.checkout.display()))?;
+        let rel_repo = Path::new("..").join("repository.fossil");
         fossil(
             Some(&self.checkout),
             Some(&self.base),
             [
                 OsStr::new("open"),
-                self.repo.as_os_str(),
+                rel_repo.as_os_str(),
                 OsStr::new("--empty"),
                 OsStr::new("--nested"),
                 OsStr::new("--nosync"),
@@ -178,35 +166,63 @@ impl Store {
             ],
         )
         .context("fossil open failed")?;
+        Ok(())
+    }
+
+    pub fn ensure_checkout(&self) -> Result<()> {
+        if self.checkout_marker_exists() {
+            return Ok(());
+        }
+        self.reopen_checkout()
+    }
+
+    pub fn commit_staging(&self, comment: &str) -> Result<String> {
+        self.ensure_checkout()?;
 
         fs::copy(
             self.staging.join(MANIFEST_FILE),
             self.checkout.join(MANIFEST_FILE),
         )
         .context("copy manifest to Fossil checkout")?;
+        let checkout_files = self.checkout.join(FILES_DIR);
         let staging_files = self.staging.join(FILES_DIR);
-        if staging_files.exists() {
-            copy_dir_contents(&staging_files, &self.checkout.join(FILES_DIR))?;
-        }
+        let structural_changes = if staging_files.exists() {
+            sync_dir_contents(&staging_files, &checkout_files)?.structural_changes
+        } else {
+            true
+        };
 
-        self.fossil_checkout([OsStr::new("addremove"), OsStr::new("--dotfiles")])
-            .context("fossil addremove failed")?;
-        self.fossil_checkout([
-            OsStr::new("-U"),
-            OsStr::new("git-chkpt"),
-            OsStr::new("commit"),
-            OsStr::new("--private"),
-            OsStr::new("--allow-empty"),
-            OsStr::new("--nosync"),
-            OsStr::new("--no-warnings"),
-            OsStr::new("--no-prompt"),
-            OsStr::new("-f"),
-            OsStr::new("--user-override"),
-            OsStr::new("git-chkpt"),
-            OsStr::new("-m"),
-            OsStr::new(comment),
-        ])
-        .context("fossil commit failed")?;
+        if structural_changes {
+            self.fossil_checkout([OsStr::new("addremove"), OsStr::new("--dotfiles")])
+                .context("fossil addremove failed")?;
+        }
+        let out = self
+            .fossil_checkout([
+                OsStr::new("-U"),
+                OsStr::new("git-chkpt"),
+                OsStr::new("commit"),
+                OsStr::new("--private"),
+                OsStr::new("--allow-empty"),
+                OsStr::new("--nosync"),
+                OsStr::new("--no-warnings"),
+                OsStr::new("--no-prompt"),
+                OsStr::new("-f"),
+                OsStr::new("--user-override"),
+                OsStr::new("git-chkpt"),
+                OsStr::new("-m"),
+                OsStr::new(comment),
+            ])
+            .context("fossil commit failed")?;
+
+        let text = String::from_utf8_lossy(&out);
+        for line in text.lines() {
+            if let Some(hash) = line.strip_prefix("New_Version:") {
+                let hash = hash.trim();
+                if !hash.is_empty() {
+                    return Ok(hash.to_owned());
+                }
+            }
+        }
 
         self.latest_hash()
     }
@@ -215,10 +231,7 @@ impl Store {
         if !self.repo.exists() {
             return Ok(Vec::new());
         }
-        if !self.checkout_marker_exists() {
-            self.ensure_initialized()?;
-        }
-        let out = self.fossil_checkout([
+        let out = self.fossil_repo([
             OsStr::new("timeline"),
             OsStr::new("-n"),
             OsStr::new("0"),
@@ -242,7 +255,7 @@ impl Store {
     }
 
     pub fn read_manifest(&self, hash: &str) -> Result<Manifest> {
-        let out = self.fossil_checkout([
+        let out = self.fossil_repo([
             OsStr::new("cat"),
             OsStr::new("-r"),
             OsStr::new(hash),
@@ -276,7 +289,7 @@ impl Store {
                         .with_context(|| format!("create {}", parent.display()))?;
                 }
                 let storage_path = format!("{FILES_DIR}/{}", entry.path);
-                self.fossil_checkout([
+                self.fossil_repo([
                     OsStr::new("cat"),
                     OsStr::new("-r"),
                     OsStr::new(hash),
@@ -328,7 +341,7 @@ impl Store {
     }
 
     fn checkpoint_paths(&self, hash: &str) -> Result<BTreeSet<String>> {
-        let out = self.fossil_checkout([OsStr::new("ls"), OsStr::new("-r"), OsStr::new(hash)])?;
+        let out = self.fossil_repo([OsStr::new("ls"), OsStr::new("-r"), OsStr::new(hash)])?;
         let mut paths = BTreeSet::new();
         for line in String::from_utf8_lossy(&out).lines() {
             let line = line.strip_suffix('\r').unwrap_or(line);
@@ -341,7 +354,7 @@ impl Store {
     }
 
     fn latest_hash(&self) -> Result<String> {
-        let out = self.fossil_checkout([
+        let out = self.fossil_repo([
             OsStr::new("timeline"),
             OsStr::new("-n"),
             OsStr::new("1"),
@@ -359,8 +372,48 @@ impl Store {
         bail!("fossil-failed: could not determine new checkpoint ID")
     }
 
-    fn fossil_checkout<const N: usize>(&self, args: [&OsStr; N]) -> Result<Vec<u8>> {
-        fossil(Some(&self.checkout), Some(&self.base), args)
+    fn fossil_checkout<I, S>(&self, args: I) -> Result<Vec<u8>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.ensure_checkout()?;
+        let args_vec: Vec<std::ffi::OsString> =
+            args.into_iter().map(|s| s.as_ref().to_os_string()).collect();
+        match fossil(Some(&self.checkout), Some(&self.base), &args_vec) {
+            Ok(out) => Ok(out),
+            Err(err) => {
+                let err_str = err.to_string();
+                if err_str.contains("repository does not exist")
+                    || err_str.contains("not in a checkout")
+                    || err_str.contains("not a valid checkout")
+                    || err_str.contains("fossil-failed")
+                {
+                    self.reopen_checkout()?;
+                    fossil(Some(&self.checkout), Some(&self.base), &args_vec)
+                } else {
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    fn fossil_repo<I, S>(&self, args: I) -> Result<Vec<u8>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut full_args = Vec::new();
+        let mut iter = args.into_iter();
+        if let Some(subcommand) = iter.next() {
+            full_args.push(subcommand.as_ref().to_os_string());
+            full_args.push(OsStr::new("-R").to_os_string());
+            full_args.push(self.repo.as_os_str().to_os_string());
+            for arg in iter {
+                full_args.push(arg.as_ref().to_os_string());
+            }
+        }
+        fossil(None, Some(&self.base), full_args)
     }
 
     fn checkout_marker_exists(&self) -> bool {
@@ -386,11 +439,15 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         .with_context(|| format!("persist {}", path.display()))
 }
 
-fn fossil<const N: usize>(
+fn fossil<I, S>(
     cwd: Option<&Path>,
     home: Option<&Path>,
-    args: [&OsStr; N],
-) -> Result<Vec<u8>> {
+    args: I,
+) -> Result<Vec<u8>>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let fossil = fossil_program()?;
     let mut command = Command::new(&fossil);
     command.args(args);
@@ -793,22 +850,84 @@ fn fossil_binary_name() -> &'static str {
     }
 }
 
-fn copy_dir_contents(src: &Path, dst: &Path) -> Result<()> {
+#[derive(Debug, Default)]
+struct SyncResult {
+    structural_changes: bool,
+}
+
+fn sync_dir_contents(src: &Path, dst: &Path) -> Result<SyncResult> {
+    let mut structural_changes = false;
+    if dst.is_file() {
+        fs::remove_file(dst).with_context(|| format!("remove file conflict {}", dst.display()))?;
+        structural_changes = true;
+    }
     fs::create_dir_all(dst).with_context(|| format!("create {}", dst.display()))?;
+
+    let mut src_names = BTreeSet::new();
     for entry in fs::read_dir(src).with_context(|| format!("read {}", src.display()))? {
         let entry = entry?;
+        let name = entry.file_name();
         let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
+        let dst_path = dst.join(&name);
         let file_type = entry.file_type()?;
+
         if file_type.is_dir() {
-            copy_dir_contents(&src_path, &dst_path)?;
+            if dst_path.is_file() {
+                fs::remove_file(&dst_path)?;
+                structural_changes = true;
+            } else if !dst_path.exists() {
+                structural_changes = true;
+            }
+            let sub = sync_dir_contents(&src_path, &dst_path)?;
+            if sub.structural_changes {
+                structural_changes = true;
+            }
+            src_names.insert(name);
         } else if file_type.is_file() {
-            fs::copy(&src_path, &dst_path).with_context(|| {
-                format!("copy {} to {}", src_path.display(), dst_path.display())
-            })?;
+            if dst_path.is_dir() {
+                fs::remove_dir_all(&dst_path)?;
+                structural_changes = true;
+            }
+            let (needs_copy, is_new) = match fs::symlink_metadata(&dst_path) {
+                Ok(dst_meta) => {
+                    let src_meta = entry.metadata()?;
+                    (
+                        dst_meta.len() != src_meta.len()
+                            || dst_meta.modified().ok() != src_meta.modified().ok(),
+                        false,
+                    )
+                }
+                Err(_) => (true, true),
+            };
+            if is_new {
+                structural_changes = true;
+            }
+            if needs_copy {
+                fs::copy(&src_path, &dst_path).with_context(|| {
+                    format!("copy {} to {}", src_path.display(), dst_path.display())
+                })?;
+            }
+            src_names.insert(name);
         } else {
             bail!("unsupported-file-type in staging: {}", src_path.display());
         }
     }
-    Ok(())
+
+    if dst.exists() {
+        for entry in fs::read_dir(dst).with_context(|| format!("read {}", dst.display()))? {
+            let entry = entry?;
+            let name = entry.file_name();
+            if !src_names.contains(&name) {
+                let dst_path = entry.path();
+                if entry.file_type()?.is_dir() {
+                    let _ = fs::remove_dir_all(&dst_path);
+                } else {
+                    let _ = fs::remove_file(&dst_path);
+                }
+                structural_changes = true;
+            }
+        }
+    }
+
+    Ok(SyncResult { structural_changes })
 }

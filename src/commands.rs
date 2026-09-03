@@ -227,7 +227,7 @@ fn restore(checkpoint: Option<String>) -> Result<()> {
     write_journal(&store, &journal)?;
 
     let pre_restore_id = save_locked(&ctx, &store, Source::pre_restore(target.id.clone()), None)?;
-    store.validate_checkpoint(&pre_restore_id)?;
+    store.read_verified_manifest(&pre_restore_id)?;
     journal.set_pre_restore(pre_restore_id.clone());
     write_journal(&store, &journal)?;
 
@@ -341,7 +341,7 @@ fn save_locked(
         let staging_root = store.staging.join(crate::manifest::FILES_DIR);
         crate::snapshot::verify_materialized(&staging_root, &manifest)?;
         let id = store.commit_staging(&comment)?;
-        let persisted = store.validate_checkpoint(&id)?;
+        let persisted = store.read_manifest(&id)?;
         if persisted.files != manifest.files
             || persisted.source != manifest.source
             || persisted.message != manifest.message
@@ -640,7 +640,7 @@ fn load_checkpoints(store: &Store) -> Result<Vec<Checkpoint>> {
         if deleted.contains(&id) {
             continue;
         }
-        match store.validate_checkpoint(&id) {
+        match store.read_verified_manifest(&id) {
             Ok(manifest) => checkpoints.push(Checkpoint { id, manifest }),
             Err(_) => continue,
         }
