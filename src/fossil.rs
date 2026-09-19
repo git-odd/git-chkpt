@@ -212,6 +212,7 @@ impl Store {
                 OsStr::new("commit"),
                 OsStr::new("--private"),
                 OsStr::new("--allow-empty"),
+                OsStr::new("--hash"),
                 OsStr::new("--nosync"),
                 OsStr::new("--no-warnings"),
                 OsStr::new("--no-prompt"),
