@@ -500,6 +500,35 @@ fn git_checkpoint_shim_binary_works() {
 }
 
 #[test]
+fn stale_checkout_marker_is_recovered_without_losing_manifest() {
+    let bin = env!("CARGO_BIN_EXE_git-chkpt");
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path();
+
+    init_repo(repo);
+    write(&repo.join("file.txt"), "v1\n");
+    run_ok(repo, bin, &["save", "first checkpoint"]);
+
+    // Simulate a checkout whose repository reference can no longer be
+    // resolved (e.g. the repository directory was moved): the marker file is
+    // still present but the checkout database is unusable.
+    let checkout = repo.join(".git/git-chkpt/checkout");
+    for marker in [checkout.join("_FOSSIL_"), checkout.join(".fslckout")] {
+        if marker.exists() {
+            fs::write(&marker, b"").unwrap();
+        }
+    }
+
+    write(&repo.join("file.txt"), "v2\n");
+    let save = run_ok(repo, bin, &["save", "second checkpoint"]);
+    assert!(save.contains("Saved checkpoint"), "{save}");
+
+    let list = run_ok(repo, bin, &["list"]);
+    assert!(list.contains("first checkpoint"), "{list}");
+    assert!(list.contains("second checkpoint"), "{list}");
+}
+
+#[test]
 fn repo_relocation_preserves_checkpoint_operations() {
     let bin = env!("CARGO_BIN_EXE_git-chkpt");
     let temp = tempfile::tempdir().unwrap();
@@ -540,4 +569,3 @@ fn repo_relocation_preserves_checkpoint_operations() {
         "v1\n"
     );
 }
-

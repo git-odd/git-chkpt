@@ -178,6 +178,15 @@ impl Store {
 
     pub fn commit_staging(&self, comment: &str) -> Result<String> {
         self.ensure_checkout()?;
+        // A checkout can survive on disk while its repository reference is no
+        // longer resolvable (for example after the whole repository directory
+        // was moved). That is only discovered when the first Fossil command
+        // runs, and recovering from it recreates the checkout from scratch via
+        // `reopen_checkout`. Probe the checkout *before* staging so recovery
+        // cannot discard the manifest and file snapshot we are about to copy
+        // into it.
+        self.fossil_checkout([OsStr::new("status")])
+            .context("fossil status failed")?;
 
         fs::copy(
             self.staging.join(MANIFEST_FILE),
@@ -378,8 +387,10 @@ impl Store {
         S: AsRef<OsStr>,
     {
         self.ensure_checkout()?;
-        let args_vec: Vec<std::ffi::OsString> =
-            args.into_iter().map(|s| s.as_ref().to_os_string()).collect();
+        let args_vec: Vec<std::ffi::OsString> = args
+            .into_iter()
+            .map(|s| s.as_ref().to_os_string())
+            .collect();
         match fossil(Some(&self.checkout), Some(&self.base), &args_vec) {
             Ok(out) => Ok(out),
             Err(err) => {
@@ -439,11 +450,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         .with_context(|| format!("persist {}", path.display()))
 }
 
-fn fossil<I, S>(
-    cwd: Option<&Path>,
-    home: Option<&Path>,
-    args: I,
-) -> Result<Vec<u8>>
+fn fossil<I, S>(cwd: Option<&Path>, home: Option<&Path>, args: I) -> Result<Vec<u8>>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
