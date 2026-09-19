@@ -399,7 +399,7 @@ impl Store {
                 if err_str.contains("repository does not exist")
                     || err_str.contains("not in a checkout")
                     || err_str.contains("not a valid checkout")
-                    || err_str.contains("fossil-failed")
+                    || err_str.contains("not within an open check-out")
                 {
                     self.reopen_checkout()?;
                     fossil(Some(&self.checkout), Some(&self.base), &args_vec)
